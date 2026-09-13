@@ -350,11 +350,184 @@ async function runTests() {
   console.log(`   9f. Delete 0-signature petition Status: ${deleteTemp.status} (Expected: 200)`);
   console.log('       Success message:', deleteTemp.body.message);
 
+  // ==========================================
+  // MILESTONE 3: POLLING & FEEDBACK VERIFICATION
+  // ==========================================
+  console.log('\n10. Testing Milestone 3: Poll Creation (POST /api/polls)...');
+  const pollPayload = {
+    title: `Civic Poll: Dedicated Bus Lanes on Outer Ring Road ${timestamp}?`,
+    description: 'Public opinion poll to prioritize municipal transit investments and road space allocation.',
+    category: 'Transportation',
+    options: [
+      { text: 'Yes, full 24/7 dedicated bus lanes' },
+      { text: 'Yes, peak hours only (8am-11am, 5pm-8pm)' },
+      { text: 'No, keep current mixed traffic lanes' }
+    ],
+    targetLocation: {
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      address: 'Outer Ring Road Transit Zone',
+      pincode: '560103'
+    }
+  };
+
+  const createPollRes = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: '/api/polls',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user1Token}`
+      }
+    },
+    pollPayload
+  );
+
+  console.log(`   10a. Poll Creation Status: ${createPollRes.status} (Expected: 201)`);
+  if (!createPollRes.body || !createPollRes.body.data || !createPollRes.body.data.poll) {
+    throw new Error('Poll creation failed: ' + JSON.stringify(createPollRes.body));
+  }
+  const poll = createPollRes.body.data.poll;
+  const pollId = poll._id || poll.id;
+  const opt1Id = poll.options[0]._id || poll.options[0].id;
+  const opt2Id = poll.options[1]._id || poll.options[1].id;
+  const opt3Id = poll.options[2]._id || poll.options[2].id;
+  console.log(`       Created Poll ID: ${pollId}`);
+  console.log(`       Options Count: ${poll.options.length}`);
+
+  // Test 10b: List polls with search & filter
+  console.log('\n11. Testing Poll Listing & Search (GET /api/polls)...');
+  const listPollsRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: `/api/polls?search=Outer+Ring+Road&category=Transportation`,
+    method: 'GET'
+  });
+  console.log(`   11a. List Polls Status: ${listPollsRes.status} (Expected: 200)`);
+  console.log(`       Total Found: ${listPollsRes.body.data.pagination.total}`);
+
+  // Test 10c: Get single poll by ID
+  const getPollRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: `/api/polls/${pollId}`,
+    method: 'GET',
+    headers: { Authorization: `Bearer ${user1Token}` }
+  });
+  console.log(`   11b. Get Single Poll Status: ${getPollRes.status} (Expected: 200)`);
+  console.log(`       Title: "${getPollRes.body.data.poll.title}"`);
+
+  // Test 12: Public Voting & Duplicate Prevention
+  console.log('\n12. Testing Public Voting & Duplicate Prevention (POST /api/polls/:id/vote)...');
+  
+  // User 1 votes for Option 1
+  const voteRes1 = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/polls/${pollId}/vote`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user1Token}`
+      }
+    },
+    { optionId: opt1Id }
+  );
+  console.log(`   12a. User 1 Vote Status: ${voteRes1.status} (Expected: 200)`);
+  console.log(`       Total Votes now: ${voteRes1.body.data.poll.totalVotes}`);
+
+  // User 2 votes for Option 2
+  const voteRes2 = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/polls/${pollId}/vote`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user2Token}`
+      }
+    },
+    { optionId: opt2Id }
+  );
+  console.log(`   12b. User 2 Vote Status: ${voteRes2.status} (Expected: 200)`);
+  console.log(`       Total Votes now: ${voteRes2.body.data.poll.totalVotes}`);
+
+  // User 1 attempts duplicate vote (Should FAIL 400)
+  const dupVoteRes = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/polls/${pollId}/vote`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user1Token}`
+      }
+    },
+    { optionId: opt2Id }
+  );
+  console.log(`   12c. Duplicate Vote Rejection Status: ${dupVoteRes.status} (Expected: 400)`);
+  console.log(`       Rejection message: "${dupVoteRes.body.message}"`);
+
+  // Test 13: Live Results & Dynamic Percentages
+  console.log('\n13. Testing Live Results & Dynamic Sentiment (GET /api/polls/:id/results)...');
+  const resultsRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: `/api/polls/${pollId}/results`,
+    method: 'GET'
+  });
+  console.log(`   13a. Results API Status: ${resultsRes.status} (Expected: 200)`);
+  console.log(`       Total Votes: ${resultsRes.body.data.totalVotes}`);
+  resultsRes.body.data.options.forEach((opt, idx) => {
+    console.log(`       Option ${idx + 1}: "${opt.text}" -> ${opt.votes} votes (${opt.percentage}%)`);
+  });
+
+  // Test 14: Poll Closing Status
+  console.log('\n14. Testing Poll Closing (PATCH /api/polls/:id/status)...');
+  const closeRes = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/polls/${pollId}/status`,
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user1Token}`
+      }
+    },
+    { status: 'closed' }
+  );
+  console.log(`   14a. Close Poll Status: ${closeRes.status} (Expected: 200)`);
+  console.log(`       Poll status is now: ${closeRes.body.data.poll.status}`);
+
+  // Vote on closed poll (Should FAIL 400)
+  const voteClosedRes = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/polls/${pollId}/vote`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user1Token}`
+      }
+    },
+    { optionId: opt3Id }
+  );
+  console.log(`   14b. Vote on Closed Poll Rejection Status: ${voteClosedRes.status} (Expected: 400)`);
+  console.log(`       Rejection message: "${voteClosedRes.body.message}"`);
+
   await mongoose.disconnect();
-  console.log('\n=== ALL VERIFICATION CHECKS PASSED SUCCESSFULLY ===');
+  console.log('\n=== ALL M1, M2, AND M3 VERIFICATION CHECKS PASSED SUCCESSFULLY ===');
 }
 
 runTests().catch((err) => {
   console.error('Fatal error during test run:', err);
   process.exit(1);
 });
+

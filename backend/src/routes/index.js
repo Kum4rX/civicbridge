@@ -19,4 +19,8 @@ router.use('/auth', authRoutes);
 const petitionRoutes = require('./petition.routes');
 router.use('/petitions', petitionRoutes);
 
+// Poll routes
+const pollRoutes = require('./poll.routes');
+router.use('/polls', pollRoutes);
+
 module.exports = router;

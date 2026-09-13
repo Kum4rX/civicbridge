@@ -16,14 +16,17 @@ The application is structured into a clean monorepo containing a high-performanc
 
 ## Features
 
-### Implemented Features (Milestone 1 & Milestone 2)
+### Implemented Features (Milestones 1, 2 & 3)
 - **User Authentication & Profiles:** Secure registration and login for `CITIZEN` and `OFFICIAL` roles, password encryption with bcrypt, JWT Bearer authentication, and profile retrieval (`/api/auth/me`).
 - **Role-Based Access Control:** Distinct capabilities and route guards for citizens and verified civic officials.
-- **Petition Creation:** Authenticated citizens and officials can publish petitions with rich descriptions, categories, tags, target signature goals, and location details.
+- **Petition Creation & Management:** Authenticated citizens and officials can publish petitions with rich descriptions, categories, tags, target signature goals, and location details.
 - **Petition Discovery:** Real-time keyword search across titles, descriptions, and tags; filtering by category, city, state, and tag; sorting and pagination.
 - **My Petitions Management:** Dedicated dashboard view for users to track their own active and draft petitions.
 - **Petition Detail View:** Full petition display with populated creator details, signature counts, status badges, and location metadata.
 - **Data Integrity Constraints:** Pre-signature edit and delete capabilities restricted strictly to the petition creator before endorsements are recorded (`signaturesCount === 0`).
+- **Issue-Specific Civic Polls:** Community and official polls with 2–10 validated unique options, expiration dates, and city/state location targeting.
+- **Public Voting & Duplicate Prevention:** Authenticated one-person-one-vote enforcement backed by unique compound indexes at the database level.
+- **Live Results & Sentiment Analytics:** Real-time dynamic aggregation of actual database votes with dynamically calculated percentages.
 - **Responsive Navigation:** Application shell with header, sidebar navigation, mobile menu, and global toast notifications.
 
 ---
@@ -59,7 +62,8 @@ CivicBridge/
 │   │   │   └── db.js                  # MongoDB database connection
 │   │   ├── controllers/
 │   │   │   ├── auth.controller.js     # User authentication controllers
-│   │   │   └── petition.controller.js # Petition CRUD & search controllers
+│   │   │   ├── petition.controller.js # Petition CRUD & search controllers
+│   │   │   └── poll.controller.js     # Poll creation, voting & results controllers
 │   │   ├── middleware/
 │   │   │   ├── auth.middleware.js     # JWT Bearer token authentication
 │   │   │   ├── role.middleware.js     # Role authorization (CITIZEN / OFFICIAL)
@@ -67,23 +71,29 @@ CivicBridge/
 │   │   │   └── error.middleware.js    # Global error & 404 handler
 │   │   ├── models/
 │   │   │   ├── user.model.js          # User schema with bcrypt password hashing
-│   │   │   └── petition.model.js      # Petition schema with location & indexes
+│   │   │   ├── petition.model.js      # Petition schema with location & indexes
+│   │   │   ├── poll.model.js          # Poll schema with options, location & status
+│   │   │   └── vote.model.js          # Vote schema with unique compound index
 │   │   ├── routes/
 │   │   │   ├── auth.routes.js         # /api/auth endpoint routes
 │   │   │   ├── petition.routes.js     # /api/petitions endpoint routes
+│   │   │   └── poll.routes.js         # /api/polls endpoint routes
 │   │   └── services/
 │   │       ├── auth.service.js        # Auth business logic & JWT generation
-│   │       └── petition.service.js    # Petition business logic, filter & sort
+│   │       ├── petition.service.js    # Petition business logic, filter & sort
+│   │       └── poll.service.js        # Poll business logic, voting & live results
 │   │   ├── utils/
 │   │   │   └── response.js            # Standardized API response formatters
 │   │   ├── validators/
 │   │   │   ├── auth.validator.js      # Input validators for authentication
-│   │   │   └── petition.validator.js  # Input validators for petitions
+│   │   │   ├── petition.validator.js  # Input validators for petitions
+│   │   │   └── poll.validator.js      # Input validators for polls & voting
 │   │   ├── app.js                     # Express app setup, CORS, and middleware
 │   │   └── server.js                  # HTTP server bootstrap & port listener
 │   ├── tests/
 │   │   ├── auth.test.js               # Jest integration tests for auth
 │   │   ├── petition.test.js           # Jest integration tests for petitions
+│   │   ├── poll.test.js               # Jest integration tests for polls & voting
 │   │   └── verify_all.js              # Comprehensive live HTTP verification suite
 │   ├── .env.example                   # Backend environment configuration template
 │   └── package.json                   # Backend dependencies and scripts
@@ -136,6 +146,13 @@ The backend is organized in a layered modular architecture:
 ### Petition APIs & Restrictions
 - **Search & Filtering:** Case-insensitive regex search across `title`, `description`, and `tags`, with category, city, and state filters.
 - **Signature Integrity Rule:** Petitions with zero signatures (`signaturesCount === 0`) can be updated or deleted by their creator. Once a petition receives endorsements (`signaturesCount > 0`), updates and deletions are locked (`400 Bad Request`). Non-creators attempting modifications receive `403 Forbidden`.
+
+### Polling & Feedback APIs (Milestone 3)
+- **Issue-Specific Poll Creation (`POST /api/polls`):** Authenticated users can publish targeted community polls with 2 to 10 unique options, category assignment, expiration/closing dates, and city/state location metadata.
+- **Public Poll Discovery (`GET /api/polls`, `GET /api/polls/:id`):** Paginated poll listing with keyword search, category, status (`active`/`closed`), and city filters. Populates creator details and contextual `hasVoted` / `votedOptionId` flags for authenticated viewers.
+- **Public Voting (`POST /api/polls/:id/vote`):** Authenticated voting on active polls. One-person-one-vote guarantee is strictly enforced at the database level with a compound unique index on `{ poll: 1, user: 1 }`. Duplicate attempts return `400 Bad Request`.
+- **Live Sentiment & Dynamic Results (`GET /api/polls/:id/results`):** Computes real-time poll results and sentiment distribution directly from actual database vote records. Returns per-option vote counts, dynamically calculated percentages rounded to 1 decimal place, and total vote tallies.
+- **Poll Status Lifecycle (`PATCH /api/polls/:id/status`):** Allows the poll creator or verified `OFFICIAL` users to transition poll status (e.g. close active polls). Voting on closed or expired polls is automatically rejected.
 
 ### Validation & Centralized Error Handling
 - Payload validation via `express-validator` and defensive controller checks.
@@ -225,6 +242,12 @@ All endpoints are prefixed with `/api`.
 | `GET` | `/api/petitions/:id` | Public | Get single petition details with populated creator |
 | `PUT` | `/api/petitions/:id` | Protected (Creator) | Edit petition (Allowed only if `signaturesCount === 0`) |
 | `DELETE` | `/api/petitions/:id` | Protected (Creator) | Delete petition (Allowed only if `signaturesCount === 0`) |
+| `POST` | `/api/polls` | Protected | Create a new civic poll with 2–10 unique options and location |
+| `GET` | `/api/polls` | Public | List active/closed polls with category, city & keyword filters |
+| `GET` | `/api/polls/:id` | Public | Get single poll details, populated creator, and voting state |
+| `POST` | `/api/polls/:id/vote` | Protected | Cast a vote on a poll (One vote per user strictly enforced) |
+| `GET` | `/api/polls/:id/results` | Public | Get live aggregated results with real dynamic percentages |
+| `PATCH` | `/api/polls/:id/status` | Protected (Creator/Official) | Update poll status (e.g. close active poll) |
 
 ---
 
@@ -234,10 +257,10 @@ All endpoints are prefixed with `/api`.
 | :--- | :---: | :--- |
 | **Backend Milestone 1** | **Completed** | Full auth lifecycle: registration, login, JWT issuance, password hashing, profile retrieval (`/api/auth/me`). |
 | **Backend Milestone 2** | **Completed** | Petition creation, search, category/city/tag filtering, pagination, sorting, detail view, creator-only edit/delete restrictions. |
+| **Backend Milestone 3** | **Completed** | Issue-specific polls, 2–10 option validation, public voting, single-vote compound index guarantee, real-time dynamic vote aggregation & sentiment percentages, poll closing permissions. |
 | **Frontend Milestone 1** | **Completed** | Landing page, Login page, Register wizard, Profile view, Auth guard, Role guard, Bearer token interceptor. |
 | **Frontend Milestone 2** | **Completed** | Petition list with real-time search & filters, petition detail view, create petition form, edit petition form, my-petitions view. |
-| **Backend Milestone 3** | *Upcoming* | Civic polling endpoints (`/api/polls`) and citizen petition signing (`POST /api/petitions/:id/sign`). |
-| **Backend Milestone 4** | *Upcoming* | Official petition responses (`POST /api/petitions/:id/response`), status transitions (`PATCH /api/petitions/:id/status`), and reports (`/api/reports/*`). |
+| **Backend Milestone 4** | *Upcoming* | Official petition responses (`POST /api/petitions/:id/response`), status transitions (`PATCH /api/petitions/:id/status`), and analytics reports (`/api/reports/*`). |
 | **Frontend M3/M4 UI** | *Placeholder* | Clean UI shell and informational empty state messaging; no mock data is generated. |
 
 ---
@@ -249,15 +272,15 @@ All endpoints are prefixed with `/api`.
 ```bash
 # 1. Backend Unit & Integration Tests (Jest)
 npm --prefix backend test
-# Output: 2 test suites passed, 48 tests passed (100% success)
+# Output: 3 test suites passed (auth, petition, poll), 78 tests passed (100% success)
 
 # 2. Backend Live Integration Verification Suite
 node backend/tests/verify_all.js
-# Output: 9 verification phases passed against live server (100% success)
+# Output: 14 verification phases passed across M1, M2, and M3 against live server (100% success)
 
 # 3. Frontend Production Build Verification
 npm --prefix frontend run build
-# Output: Application bundle generated in ~4.3s with 0 errors
+# Output: Application bundle generated in ~19.4s with 0 errors
 ```
 
 ---
