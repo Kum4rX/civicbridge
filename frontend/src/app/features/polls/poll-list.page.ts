@@ -1,5 +1,5 @@
-import { DatePipe, DecimalPipe, NgFor, NgIf, SlicePipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+﻿import { DatePipe, DecimalPipe, NgFor, NgIf, SlicePipe } from '@angular/common';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
@@ -59,7 +59,7 @@ import { PaginationComponent } from '../../shared/components/pagination.componen
             id="poll-search"
             class="input"
             type="search"
-            placeholder="Search by question…"
+            placeholder="Search by question..."
             [ngModel]="query.search"
             (ngModelChange)="onSearch($event)"
           />
@@ -91,29 +91,23 @@ import { PaginationComponent } from '../../shared/components/pagination.componen
 
     <cx-error-state
       *ngIf="state() === 'error'"
-      title="Couldn’t load polls"
+      title="Couldn't load polls"
       [message]="error()"
       (retry)="load()"
     ></cx-error-state>
 
     <cx-empty-state
       *ngIf="state() === 'unavailable'"
-      icon="⚠"
-      title="Polls are not available"
-      message="The polls endpoint is not exposed by the backend yet."
+      icon="🗳️"
+      title="Unable to load polls"
+      message="Could not connect to the polling service right now. Please try again later."
     ></cx-empty-state>
 
     <cx-empty-state
       *ngIf="state() === 'empty'"
-      icon="▤"
-      [title]="isFiltered() ? 'No polls match these filters' : 'No polls yet'"
-      [message]="
-        isFiltered()
-          ? 'Try widening your search or clearing the filters.'
-          : auth.isOfficial()
-            ? 'Publish the first poll to hear from residents in your locality.'
-            : 'Officials haven’t published any polls yet. Check back soon.'
-      "
+      icon="🗳️"
+      [title]="emptyTitle()"
+      [message]="emptyMessage()"
     >
       <button *ngIf="isFiltered()" class="btn btn--ghost btn--sm" type="button" (click)="clear()">Clear filters</button>
       <a *ngIf="!isFiltered() && auth.isOfficial()" class="btn btn--primary btn--sm" routerLink="/polls/new">Create poll</a>
@@ -213,6 +207,20 @@ export class PollListPage implements OnInit {
 
   query: PollQuery = { search: '', status: '', city: '', state: '', page: 1 };
   nearMe = false;
+
+  readonly emptyTitle = computed(() => {
+    return this.isFiltered() ? 'No polls match these filters' : 'No polls yet';
+  });
+
+  readonly emptyMessage = computed(() => {
+    if (this.isFiltered()) {
+      return 'Try widening your search or clearing the filters.';
+    }
+    if (this.auth.isOfficial()) {
+      return 'Publish the first poll to hear from residents in your locality.';
+    }
+    return 'Officials have not published any polls yet. Check back soon.';
+  });
 
   ngOnInit(): void {
     const qp = this.route.snapshot.queryParamMap;

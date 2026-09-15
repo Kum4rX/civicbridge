@@ -1,8 +1,6 @@
-import { DatePipe, DecimalPipe, NgFor, NgIf } from '@angular/common';
+﻿import { DatePipe, DecimalPipe, NgFor, NgIf } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
 import { LoadState } from '../../core/models/api.model';
 import { Poll, PollResults } from '../../core/models/poll.model';
 import { AuthService } from '../../core/services/auth.service';
@@ -21,22 +19,22 @@ const BAR_COLORS = ['#1f4ed8', '#0f9d8f', '#e2703a', '#b25e09', '#7c3aed', '#667
   standalone: true,
   imports: [NgIf, NgFor, DatePipe, DecimalPipe, RouterLink, StatusBadgeComponent, EmptyStateComponent, ErrorStateComponent, LoaderComponent],
   template: `
-    <a routerLink="/polls" class="back">← Back to polls</a>
+    <a routerLink="/polls" class="back">&larr; Back to polls</a>
 
     <cx-loader *ngIf="state() === 'loading'" variant="rows" [count]="5"></cx-loader>
 
     <cx-empty-state
       *ngIf="state() === 'unavailable'"
-      icon="⚠"
-      title="Polls are not available"
-      message="Community polls will be available in Milestone 3."
+      icon="🗳️"
+      title="Poll not found"
+      message="This poll is unavailable or could not be loaded."
     >
-      <a class="btn btn--ghost btn--sm" routerLink="/petitions">Browse petitions</a>
+      <a class="btn btn--ghost btn--sm" routerLink="/polls">Browse polls</a>
     </cx-empty-state>
 
     <cx-error-state
       *ngIf="state() === 'error'"
-      title="Couldn’t load this poll"
+      title="Couldn't load this poll"
       [message]="error()"
       (retry)="load()"
     ></cx-error-state>
@@ -59,7 +57,7 @@ const BAR_COLORS = ['#1f4ed8', '#0f9d8f', '#e2703a', '#b25e09', '#7c3aed', '#667
           </div>
         </header>
 
-        <!-- Voting -->
+        <!-- Voting Form (Citizens only, active polls, haven't voted yet) -->
         <section class="card" *ngIf="canVote()">
           <div class="card__head">
             <div>
@@ -89,16 +87,17 @@ const BAR_COLORS = ['#1f4ed8', '#0f9d8f', '#e2703a', '#b25e09', '#7c3aed', '#667
           </div>
         </section>
 
+        <!-- Official Notice -->
         <section class="card notice" *ngIf="!canVote() && !p.hasVoted && auth.isOfficial() && !isClosed()">
           <strong>Officials observe, citizens vote.</strong>
           <p class="small muted">Voting is reserved for citizen accounts. Results update live below.</p>
         </section>
 
-        <!-- Results -->
+        <!-- Results Section -->
         <section class="card">
           <div class="card__head">
             <div>
-              <h2>Results</h2>
+              <h2>Live Results</h2>
               <p class="small muted" *ngIf="results() as r">{{ r.totalVotes | number }} total vote{{ r.totalVotes === 1 ? '' : 's' }}</p>
             </div>
             <button class="btn btn--ghost btn--sm" type="button" (click)="loadResults()" [disabled]="resultsState() === 'loading'">
@@ -114,11 +113,6 @@ const BAR_COLORS = ['#1f4ed8', '#0f9d8f', '#e2703a', '#b25e09', '#7c3aed', '#667
             [message]="resultsError()"
             (retry)="loadResults()"
           ></cx-error-state>
-
-          <div class="unavail" *ngIf="resultsState() === 'unavailable'">
-            <strong>Results not available</strong>
-            <p class="small muted">The backend does not expose a results endpoint for this poll yet.</p>
-          </div>
 
           <ng-container *ngIf="resultsState() === 'loaded' && results() as r">
             <p class="small muted" *ngIf="!r.totalVotes">No votes yet — be the first to weigh in.</p>
@@ -154,11 +148,28 @@ const BAR_COLORS = ['#1f4ed8', '#0f9d8f', '#e2703a', '#b25e09', '#7c3aed', '#667
             <div *ngIf="p.closingDate"><dt>Closing</dt><dd>{{ p.closingDate | date: 'medium' }}</dd></div>
           </dl>
         </div>
+
+        <!-- Official Poll Management -->
+        <div class="card" *ngIf="canClose()">
+          <h3>Official actions</h3>
+          <p class="small muted">Close this poll to conclude public voting and finalize recorded responses.</p>
+          <button
+            type="button"
+            class="btn btn--subtle btn--block"
+            [disabled]="closing()"
+            (click)="closePoll()"
+            style="margin-top:12px"
+          >
+            <span class="spinner" *ngIf="closing()"></span>Close poll
+          </button>
+        </div>
+
         <div class="card" *ngIf="p.hasVoted">
           <h3>Thanks for voting</h3>
           <p class="small muted">Your response is recorded. Browse other polls to keep shaping local decisions.</p>
           <a routerLink="/polls" class="btn btn--subtle btn--sm" style="margin-top:12px">More polls</a>
         </div>
+
         <div class="card" *ngIf="isClosed()">
           <h3>This poll is closed</h3>
           <p class="small muted">Voting has ended. Final results are shown on the left.</p>
@@ -205,6 +216,20 @@ const BAR_COLORS = ['#1f4ed8', '#0f9d8f', '#e2703a', '#b25e09', '#7c3aed', '#667
         align-items: center;
         gap: 12px;
         width: 100%;
+        text-align: left;
+        background: var(--c-surface);
+        border: 1px solid var(--c-border);
+        border-radius: var(--r-md);
+        padding: 12px 14px;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease;
+      }
+      .choice:hover {
+        border-color: var(--c-primary);
+      }
+      .choice.is-selected {
+        border-color: var(--c-primary);
+        background: var(--c-primary-soft);
       }
       .radio {
         width: 18px;
@@ -224,8 +249,11 @@ const BAR_COLORS = ['#1f4ed8', '#0f9d8f', '#e2703a', '#b25e09', '#7c3aed', '#667
         border-radius: 50%;
         background: var(--c-primary);
       }
-      .notice,
-      .unavail {
+      .choice__title {
+        font-weight: 500;
+        font-size: 0.95rem;
+      }
+      .notice {
         border-left: 4px solid var(--c-warn);
       }
       .results {
@@ -259,6 +287,13 @@ const BAR_COLORS = ['#1f4ed8', '#0f9d8f', '#e2703a', '#b25e09', '#7c3aed', '#667
       .results__bar {
         height: 12px;
         margin-bottom: 4px;
+        border-radius: var(--r-sm);
+        background: var(--c-surface-alt);
+        overflow: hidden;
+      }
+      .progress__bar {
+        height: 100%;
+        transition: width 0.4s ease;
       }
       .facts {
         margin: 12px 0 0;
@@ -306,6 +341,7 @@ export class PollDetailPage implements OnInit {
   readonly resultsError = signal('');
   readonly selected = signal<string | null>(null);
   readonly voting = signal(false);
+  readonly closing = signal(false);
 
   readonly isClosed = computed(() => {
     const p = this.poll();
@@ -317,6 +353,15 @@ export class PollDetailPage implements OnInit {
   readonly canVote = computed(() => {
     const p = this.poll();
     return !!p && this.auth.isCitizen() && !p.hasVoted && !this.isClosed();
+  });
+
+  readonly canClose = computed(() => {
+    const p = this.poll();
+    if (!p || this.isClosed()) return false;
+    const user = this.auth.user();
+    if (!user) return false;
+    const isCreator = p.createdBy?.id === user.id || p.creator?.id === user.id;
+    return this.auth.isOfficial() || isCreator;
   });
 
   private id = '';
@@ -388,11 +433,28 @@ export class PollDetailPage implements OnInit {
         this.voting.set(false);
         const message = apiErrorMessage(err, 'Could not submit your vote.');
         this.toast.error(message);
-        // Backend says already voted → reflect that state.
         if (/already/i.test(message)) {
           this.poll.set({ ...p, hasVoted: true });
           this.loadResults();
         }
+      },
+    });
+  }
+
+  closePoll(): void {
+    const p = this.poll();
+    if (!p) return;
+    this.closing.set(true);
+    this.polls.updateStatus(p.id, 'closed').subscribe({
+      next: (updated) => {
+        this.poll.set(updated);
+        this.closing.set(false);
+        this.toast.success('Poll has been closed successfully.');
+        this.loadResults();
+      },
+      error: (err) => {
+        this.closing.set(false);
+        this.toast.error(apiErrorMessage(err, 'Could not close the poll.'));
       },
     });
   }

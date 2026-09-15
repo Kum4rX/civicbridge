@@ -115,7 +115,7 @@ interface Stat {
         </div>
         <cx-loader *ngIf="pollState() === 'loading'" variant="rows" [count]="3"></cx-loader>
         <p class="muted small" *ngIf="pollState() === 'unavailable'">
-          Polls are not available on the backend yet (Milestone 3).
+          No open polls are currently available.
         </p>
         <cx-error-state
           *ngIf="pollState() === 'error'"
@@ -303,3 +303,4 @@ export class DashboardPage implements OnInit {
       });
   }
 }
+

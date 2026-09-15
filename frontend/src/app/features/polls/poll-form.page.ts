@@ -1,4 +1,4 @@
-import { NgFor, NgIf } from '@angular/common';
+﻿import { NgFor, NgIf } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import {
   AbstractControl,
@@ -36,7 +36,7 @@ function futureDate(control: AbstractControl): ValidationErrors | null {
   standalone: true,
   imports: [NgIf, NgFor, ReactiveFormsModule, RouterLink, PageHeaderComponent],
   template: `
-    <a routerLink="/polls" class="back">← Back to polls</a>
+    <a routerLink="/polls" class="back">&larr; Back to polls</a>
     <cx-page-header
       eyebrow="Official"
       title="Create a poll"
@@ -69,17 +69,22 @@ function futureDate(control: AbstractControl): ValidationErrors | null {
             <textarea
               id="description"
               class="textarea"
+              rows="3"
               formControlName="description"
               maxlength="800"
               placeholder="Give residents the background they need to vote confidently."
+              [class.is-invalid]="invalid('description')"
             ></textarea>
-            <span class="counter">{{ form.get('description')?.value?.length || 0 }}/800</span>
+            <div class="spread">
+              <span class="error-text" *ngIf="invalid('description')">Description is too long.</span>
+              <span class="counter">{{ form.get('description')?.value?.length || 0 }}/800</span>
+            </div>
           </div>
           <div class="form-grid">
             <div class="field">
               <label for="category">Category</label>
               <select id="category" class="select" formControlName="category">
-                <option value="">Select a category</option>
+                <option value="">Choose category</option>
                 <option *ngFor="let c of categories" [value]="c">{{ c }}</option>
               </select>
             </div>
@@ -92,16 +97,18 @@ function futureDate(control: AbstractControl): ValidationErrors | null {
                 formControlName="closingDate"
                 [class.is-invalid]="invalid('closingDate')"
               />
-              <span class="error-text" *ngIf="invalid('closingDate')">Closing date must be in the future.</span>
+              <span class="error-text" *ngIf="invalid('closingDate')">
+                Closing date must be in the future.
+              </span>
             </div>
           </div>
         </div>
 
         <div class="card">
-          <div class="card__head">
+          <div class="spread">
             <div>
-              <h2>Options</h2>
-              <p class="small muted">Between 2 and {{ maxOptions }} distinct answers.</p>
+              <h2>Options *</h2>
+              <p class="small muted">Provide between 2 and {{ maxOptions }} distinct choices.</p>
             </div>
             <button
               type="button"
@@ -112,14 +119,17 @@ function futureDate(control: AbstractControl): ValidationErrors | null {
               + Add option
             </button>
           </div>
-          <div formArrayName="options" class="options">
-            <div class="option" *ngFor="let opt of options.controls; let i = index" [formGroupName]="i">
+          <div class="options" formArrayName="options" style="margin-top:16px">
+            <div
+              class="option"
+              *ngFor="let opt of options.controls; let i = index"
+              [formGroupName]="i"
+            >
               <span class="option__index">{{ i + 1 }}</span>
               <input
                 class="input"
                 formControlName="text"
                 maxlength="80"
-                [attr.aria-label]="'Option ' + (i + 1)"
                 [placeholder]="'Option ' + (i + 1)"
                 [class.is-invalid]="opt.get('text')?.invalid && (opt.get('text')?.touched || submitted())"
               />
@@ -130,7 +140,7 @@ function futureDate(control: AbstractControl): ValidationErrors | null {
                 (click)="removeOption(i)"
                 [disabled]="options.length <= 2"
               >
-                ✕
+                &times;
               </button>
             </div>
           </div>
@@ -147,15 +157,17 @@ function futureDate(control: AbstractControl): ValidationErrors | null {
 
         <div class="card">
           <h2>Locality</h2>
-          <p class="small muted">Prefilled from your profile. Leave blank for a state-wide or open poll.</p>
+          <p class="small muted">Prefilled from your profile. City and state are required for local civic routing.</p>
           <div class="form-grid" style="margin-top:16px">
             <div class="field">
-              <label for="city">City</label>
-              <input id="city" class="input" formControlName="city" />
+              <label for="city">City *</label>
+              <input id="city" class="input" formControlName="city" [class.is-invalid]="invalid('city')" />
+              <span class="error-text" *ngIf="invalid('city')">City is required.</span>
             </div>
             <div class="field">
-              <label for="state">State</label>
-              <input id="state" class="input" formControlName="state" />
+              <label for="state">State *</label>
+              <input id="state" class="input" formControlName="state" [class.is-invalid]="invalid('state')" />
+              <span class="error-text" *ngIf="invalid('state')">State is required.</span>
             </div>
           </div>
         </div>
@@ -176,6 +188,7 @@ function futureDate(control: AbstractControl): ValidationErrors | null {
           <ul class="checklist">
             <li [class.ok]="form.get('question')?.valid">Clear, neutral question</li>
             <li [class.ok]="options.valid && !optionsIncomplete()">2–{{ maxOptions }} unique options</li>
+            <li [class.ok]="form.get('city')?.valid && form.get('state')?.valid">City and state specified</li>
             <li [class.ok]="!form.get('closingDate')?.value || form.get('closingDate')?.valid">Sensible closing date</li>
           </ul>
           <div class="server-error" *ngIf="serverError()" role="alert">{{ serverError() }}</div>
@@ -267,13 +280,13 @@ function futureDate(control: AbstractControl): ValidationErrors | null {
         color: var(--c-ink-muted);
       }
       .checklist li::before {
-        content: '○ ';
+        content: '✕ ';
       }
       .checklist li.ok {
         color: var(--c-success);
       }
       .checklist li.ok::before {
-        content: '● ';
+        content: '✓ ';
       }
       .server-error {
         margin-top: 14px;
@@ -312,8 +325,8 @@ export class PollFormPage {
     description: ['', [Validators.maxLength(800)]],
     category: [''],
     closingDate: ['', [futureDate]],
-    city: [this.auth.user()?.city ?? ''],
-    state: [this.auth.user()?.state ?? ''],
+    city: [this.auth.user()?.city ?? '', [Validators.required]],
+    state: [this.auth.user()?.state ?? '', [Validators.required]],
     options: this.fb.array([this.optionGroup(), this.optionGroup()], [uniqueOptions]),
   });
 
@@ -353,20 +366,31 @@ export class PollFormPage {
       return;
     }
     const v = this.form.getRawValue();
+    const city = v.city.trim() || this.auth.user()?.city || '';
+    const state = v.state.trim() || this.auth.user()?.state || '';
+
     const payload: PollPayload = {
       question: v.question.trim(),
+      title: v.question.trim(),
       description: v.description.trim() || undefined,
       category: v.category || undefined,
       closingDate: v.closingDate ? new Date(v.closingDate).toISOString() : null,
-      city: v.city.trim() || null,
-      state: v.state.trim() || null,
+      endDate: v.closingDate ? new Date(v.closingDate).toISOString() : null,
+      city,
+      state,
+      targetLocation: {
+        city,
+        state,
+        address: this.auth.user()?.address || '',
+        pincode: this.auth.user()?.pincode || '',
+      },
       options: v.options.map((o) => ({ text: o.text.trim() })),
     };
     this.saving.set(true);
     this.polls.create(payload).subscribe({
       next: (poll) => {
         this.saving.set(false);
-        this.toast.success('Poll published.');
+        this.toast.success('Poll published successfully.');
         void this.router.navigate(poll?.id ? ['/polls', poll.id] : ['/polls']);
       },
       error: (err) => {
