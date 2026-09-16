@@ -1,4 +1,51 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
+
+const responseSchema = new mongoose.Schema(
+  {
+    official: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    officialName: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    officialRole: {
+      type: String,
+      default: 'OFFICIAL',
+      trim: true
+    },
+    message: {
+      type: String,
+      required: [true, 'Response message is required'],
+      trim: true,
+      minlength: [5, 'Response message must be at least 5 characters'],
+      maxlength: [5000, 'Response message cannot exceed 5000 characters']
+    },
+    status: {
+      type: String,
+      enum: ['draft', 'active', 'under_review', 'closed', 'flagged'],
+      default: null
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  },
+  {
+    toJSON: {
+      transform: function (doc, ret) {
+        if (ret._id) {
+          ret.id = ret._id.toString();
+        }
+        delete ret.__v;
+        return ret;
+      }
+    }
+  }
+);
 
 const petitionSchema = new mongoose.Schema(
   {
@@ -82,18 +129,28 @@ const petitionSchema = new mongoose.Schema(
     mediaUrls: {
       type: [String],
       default: []
+    },
+    responses: {
+      type: [responseSchema],
+      default: []
     }
   },
   {
     timestamps: true,
     toJSON: {
       transform: function (doc, ret) {
+        if (ret._id) {
+          ret.id = ret._id.toString();
+        }
         delete ret.__v;
         return ret;
       }
     },
     toObject: {
       transform: function (doc, ret) {
+        if (ret._id) {
+          ret.id = ret._id.toString();
+        }
         delete ret.__v;
         return ret;
       }

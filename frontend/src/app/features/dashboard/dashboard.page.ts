@@ -66,11 +66,11 @@ interface Stat {
         </article>
       </div>
       <p class="muted small" *ngIf="statsState() === 'unavailable'">
-        Platform metrics are not exposed by the backend yet.
+        Platform metrics are not available at this time.
       </p>
       <cx-error-state
         *ngIf="statsState() === 'error'"
-        title="Couldn’t load metrics"
+        title="Couldn't load metrics"
         [message]="statsError()"
         (retry)="loadStats()"
       ></cx-error-state>
@@ -81,22 +81,22 @@ interface Stat {
       <section class="stack" style="gap:14px">
         <div class="spread">
           <h2>Latest petitions{{ locationSuffix() }}</h2>
-          <a routerLink="/petitions" class="small">View all →</a>
+          <a routerLink="/petitions" class="small">View all &rarr;</a>
         </div>
 
         <cx-loader *ngIf="petitionState() === 'loading'" variant="cards" [count]="4"></cx-loader>
         <p class="muted small" *ngIf="petitionState() === 'unavailable'">
-          Petitions are not available on the backend yet (Milestone 2).
+          Petitions are currently unavailable.
         </p>
         <cx-error-state
           *ngIf="petitionState() === 'error'"
-          title="Couldn’t load petitions"
+          title="Couldn't load petitions"
           [message]="petitionError()"
           (retry)="loadPetitions()"
         ></cx-error-state>
         <cx-empty-state
           *ngIf="petitionState() === 'empty'"
-          icon="✎"
+          icon="&#128221;"
           title="No petitions yet"
           message="Be the first to raise an issue for your community."
         >
@@ -111,7 +111,7 @@ interface Stat {
       <aside class="stack" style="gap:14px">
         <div class="spread">
           <h2>Open polls</h2>
-          <a routerLink="/polls" class="small">All polls →</a>
+          <a routerLink="/polls" class="small">All polls &rarr;</a>
         </div>
         <cx-loader *ngIf="pollState() === 'loading'" variant="rows" [count]="3"></cx-loader>
         <p class="muted small" *ngIf="pollState() === 'unavailable'">
@@ -119,15 +119,15 @@ interface Stat {
         </p>
         <cx-error-state
           *ngIf="pollState() === 'error'"
-          title="Couldn’t load polls"
+          title="Couldn't load polls"
           [message]="pollError()"
           (retry)="loadPolls()"
         ></cx-error-state>
         <cx-empty-state
           *ngIf="pollState() === 'empty'"
-          icon="◉"
+          icon="&#128202;"
           title="No open polls"
-          message="Officials haven’t published any polls for your area yet."
+          message="Officials haven't published any polls for your area yet."
         ></cx-empty-state>
         <div class="stack" style="gap:10px" *ngIf="pollState() === 'loaded'">
           <a class="card card--interactive poll" *ngFor="let poll of polls()" [routerLink]="['/polls', poll.id]">
@@ -219,7 +219,7 @@ export class DashboardPage implements OnInit {
   readonly subtitle = computed(() =>
     this.auth.isOfficial()
       ? 'Review what citizens are raising and respond where it matters.'
-      : 'Here is what’s happening in your community right now.',
+      : 'Here is what is happening in your community right now.',
   );
 
   readonly stats = computed<Stat[]>(() => {
@@ -303,4 +303,3 @@ export class DashboardPage implements OnInit {
       });
   }
 }
-

@@ -1,4 +1,4 @@
-﻿import { environment } from '../../../environments/environment';
+import { environment } from '../../../environments/environment';
 
 /**
  * SINGLE SOURCE OF TRUTH for the existing backend contract.
@@ -28,6 +28,9 @@ export const API = {
     respond: (id: string) => `${base}/petitions/${id}/response`,
     status: (id: string) => `${base}/petitions/${id}/status`,
   },
+  governance: {
+    petitions: `${base}/governance/petitions`,
+  },
   polls: {
     list: `${base}/polls`,
     create: `${base}/polls`,
@@ -40,9 +43,7 @@ export const API = {
     summary: `${base}/reports/summary`,
     petitions: `${base}/reports/petitions`,
     polls: `${base}/reports/polls`,
-    /** INTEGRATION POINT – only used if your backend exposes it. */
     export: `${base}/reports/export`,
-    /** INTEGRATION POINT – sentiment/trend series. */
     sentiment: `${base}/reports/sentiment`,
   },
 } as const;

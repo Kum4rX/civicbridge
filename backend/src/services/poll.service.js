@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const Poll = require('../models/poll.model');
 const Vote = require('../models/vote.model');
 
@@ -7,50 +6,51 @@ class PollService {
    * Create a new poll
    */
   async create(userId, pollData) {
-    const title = (pollData.title || pollData.question || '').trim();
-    const description = (pollData.description || '').trim();
-    const category = (pollData.category || 'Governance').trim();
-    const rawOptions = pollData.options || [];
-    const loc = pollData.targetLocation || pollData.location || {};
-    const status = pollData.status || 'active';
-    const endDate = pollData.endDate || pollData.closingDate || null;
+    const {
+      title,
+      question,
+      description,
+      options,
+      targetLocation,
+      location,
+      category,
+      startDate,
+      endDate,
+      status
+    } = pollData;
 
-    // Normalize options
-    const formattedOptions = rawOptions.map((opt) => {
-      const text = typeof opt === 'string' ? opt.trim() : (opt && opt.text ? String(opt.text).trim() : '');
+    // Support both title and question
+    const pollTitle = (title || question || '').trim();
+
+    // Support targetLocation or location object
+    const pollLocation = targetLocation || location || {};
+
+    // Map options into subdocuments
+    const formattedOptions = (options || []).map((opt) => {
+      const text = typeof opt === 'string' ? opt : opt.text;
       return {
-        _id: new mongoose.Types.ObjectId(),
-        text,
+        text: (text || '').trim(),
         votesCount: 0
       };
     });
 
-    // Check uniqueness
-    const texts = formattedOptions.map((o) => o.text.toLowerCase());
-    if (new Set(texts).size !== texts.length) {
-      const error = new Error('Poll options must be unique');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const targetLocation = {
-      address: loc.address || '',
-      city: (loc.city || '').trim(),
-      state: (loc.state || '').trim(),
-      pincode: loc.pincode || '',
-      latitude: loc.latitude !== undefined ? loc.latitude : null,
-      longitude: loc.longitude !== undefined ? loc.longitude : null
-    };
-
     const poll = await Poll.create({
-      title,
-      description,
-      category,
+      title: pollTitle,
+      description: (description || '').trim(),
       options: formattedOptions,
+      targetLocation: {
+        address: (pollLocation.address || '').trim(),
+        city: (pollLocation.city || '').trim(),
+        state: (pollLocation.state || '').trim(),
+        pincode: (pollLocation.pincode || '').trim(),
+        latitude: pollLocation.latitude || null,
+        longitude: pollLocation.longitude || null
+      },
+      category: category || 'Other',
       creator: userId,
-      targetLocation,
-      status,
-      endDate: endDate ? new Date(endDate) : null,
+      startDate: startDate || new Date(),
+      endDate: endDate || null,
+      status: status || 'active',
       totalVotes: 0
     });
 
@@ -67,9 +67,9 @@ class PollService {
 
     const filter = {};
 
-    // Status filter (if provided, otherwise show all)
+    // Status filter
     if (queryParams.status) {
-      filter.status = queryParams.status;
+      filter.status = queryParams.status.toLowerCase();
     }
 
     // Category filter
@@ -117,7 +117,9 @@ class PollService {
         user: currentUserId
       });
       userVotes.forEach((v) => {
-        userVotesMap.set(v.poll.toString(), v.selectedOption.toString());
+        if (v.poll && v.selectedOption) {
+          userVotesMap.set(v.poll.toString(), v.selectedOption.toString());
+        }
       });
     }
 
@@ -170,7 +172,10 @@ class PollService {
         user: currentUserId
       });
       pollObj.hasVoted = !!userVote;
-      pollObj.votedOptionId = userVote ? userVote.selectedOption.toString() : null;
+      pollObj.votedOptionId =
+        userVote && userVote.selectedOption
+          ? userVote.selectedOption.toString()
+          : null;
     }
 
     return pollObj;
@@ -294,9 +299,11 @@ class PollService {
     const voteCountMap = new Map();
     let totalVotesCount = 0;
     voteAggregations.forEach((item) => {
-      const count = Number(item.count) || 0;
-      voteCountMap.set(item._id.toString(), count);
-      totalVotesCount += count;
+      if (item && item._id) {
+        const count = Number(item.count) || 0;
+        voteCountMap.set(item._id.toString(), count);
+        totalVotesCount += count;
+      }
     });
 
     // Build real-time options breakdown with dynamically calculated percentages

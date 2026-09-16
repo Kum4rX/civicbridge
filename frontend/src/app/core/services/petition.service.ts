@@ -1,6 +1,6 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map, throwError } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { API } from '../api/api-endpoints';
 import { Paginated } from '../models/api.model';
@@ -79,40 +79,52 @@ export class PetitionService {
       );
   }
 
-  /** Milestone 4 — requires a "petitions I signed" endpoint on the backend. */
+  /** Milestone 4 — petitions signed by the authenticated user */
   signed(query: PetitionQuery = {}): Observable<Paginated<Petition>> {
-    return throwError(
-      () =>
-        new HttpErrorResponse({
-          status: 501,
-          statusText: 'Not Implemented',
-          error: { message: 'Signed petitions will be available in a later milestone' },
-        }),
-    );
+    const limit = query.limit ?? environment.defaultPageSize;
+    const params = toParams(this.formatQuery({ ...query, limit }));
+    return this.http
+      .get<unknown>(API.petitions.signed, { params })
+      .pipe(
+        map((raw) => {
+          const paginated = toPaginated<any>(raw, limit);
+          return {
+            ...paginated,
+            items: (paginated.items ?? []).map((item) => this.normalisePetition(item)),
+          };
+        })
+      );
   }
 
-  /** Milestone 4 — official governance response. */
+  /** Milestone 4 — official governance response */
   respond(id: string, message: string, status?: PetitionStatus): Observable<GovernanceResponse> {
-    return throwError(
-      () =>
-        new HttpErrorResponse({
-          status: 501,
-          statusText: 'Not Implemented',
-          error: { message: 'Official governance responses will be available in Milestone 4' },
-        }),
-    );
+    const payload: Record<string, unknown> = { message };
+    if (status) {
+      payload['status'] = status.toLowerCase();
+    }
+    return this.http
+      .post<unknown>(API.petitions.respond(id), payload)
+      .pipe(
+        map((res: any) => {
+          const resp = res?.data?.response ?? res?.response ?? res?.data ?? res;
+          return {
+            id: resp.id ?? resp._id,
+            message: resp.message,
+            status: resp.status ? (resp.status.toUpperCase() as PetitionStatus) : undefined,
+            respondedBy: resp.respondedBy,
+            createdAt: resp.createdAt,
+          };
+        })
+      );
   }
 
-  /** Milestone 4 — official status update. */
+  /** Milestone 4 — official status update */
   updateStatus(id: string, status: PetitionStatus): Observable<Petition> {
-    return throwError(
-      () =>
-        new HttpErrorResponse({
-          status: 501,
-          statusText: 'Not Implemented',
-          error: { message: 'Status updates will be available in Milestone 4' },
-        }),
-    );
+    return this.http
+      .patch<unknown>(API.petitions.status(id), { status: status.toLowerCase() })
+      .pipe(
+        map((res: any) => this.normalisePetition(res?.data?.petition ?? res?.petition ?? res?.data ?? res))
+      );
   }
 
   /** Mirrors the backend rule: creator + zero signatures. UX only; backend is authoritative. */
@@ -125,9 +137,28 @@ export class PetitionService {
   normalisePetition(raw: any): Petition {
     if (!raw || typeof raw !== 'object') return raw;
     const loc = raw.location && typeof raw.location === 'object' ? raw.location : {};
+    const rawStatus = (raw.status ?? 'ACTIVE').toString().toUpperCase();
+    const responses = Array.isArray(raw.responses)
+      ? raw.responses.map((r: any) => ({
+          id: r.id ?? r._id ?? '',
+          message: r.message ?? '',
+          status: r.status ? (r.status.toUpperCase() as PetitionStatus) : undefined,
+          respondedBy: r.officialName
+            ? { fullName: r.officialName, id: r.official }
+            : r.respondedBy,
+          createdAt: r.createdAt ?? null,
+        }))
+      : [];
+
     return {
       ...raw,
       id: raw.id ?? raw._id ?? '',
+      title: raw.title ?? '',
+      description: raw.description ?? '',
+      category: raw.category ?? 'Other',
+      status: rawStatus as PetitionStatus,
+      signaturesCount: Number(raw.signaturesCount) || 0,
+      targetSignatures: Number(raw.targetSignatures) || 100,
       city: raw.city ?? loc.city ?? null,
       state: raw.state ?? loc.state ?? null,
       address: raw.address ?? loc.address ?? null,
@@ -139,6 +170,9 @@ export class PetitionService {
         raw.creator?.id ??
         raw.creator?._id ??
         (typeof raw.creator === 'string' ? raw.creator : undefined),
+      hasSigned: !!raw.hasSigned,
+      signedAt: raw.signedAt ?? null,
+      responses,
     };
   }
 

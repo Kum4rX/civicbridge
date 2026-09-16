@@ -21,10 +21,10 @@ import { PetitionCollectionComponent } from './petition-collection.component';
 
     <cx-petition-collection
       [source]="source"
-      emptyIcon="✓"
-      emptyTitle="You haven’t signed any petitions"
+      emptyIcon="&#9997;"
+      emptyTitle="You haven't signed any petitions"
       emptyMessage="Every signature counts. Browse active petitions near you and add your voice."
-      unavailableMessage="The “signed petitions” endpoint is not exposed by the backend yet."
+      unavailableMessage="No signed petitions found in this scope."
     >
       <a class="btn btn--primary btn--sm" routerLink="/petitions">Browse petitions</a>
     </cx-petition-collection>

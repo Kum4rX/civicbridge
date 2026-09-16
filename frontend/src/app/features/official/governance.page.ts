@@ -21,10 +21,9 @@ import { PaginationComponent } from '../../shared/components/pagination.componen
 import { StatusBadgeComponent } from '../../shared/components/badge.component';
 
 /**
- * Milestone 4 — official governance workspace.
- * Lists petitions in the official's locality (server-side filtered via the
- * existing `GET /petitions` query contract) and lets them respond
- * (`POST /petitions/:id/response`) or change status (`PATCH /petitions/:id/status`).
+ * Official governance workspace.
+ * Lists petitions in the official's locality and lets them respond
+ * (POST /petitions/:id/response) or update status (PATCH /petitions/:id/status).
  */
 @Component({
   selector: 'cx-governance',
@@ -113,21 +112,21 @@ import { StatusBadgeComponent } from '../../shared/components/badge.component';
 
     <cx-error-state
       *ngIf="state$() === 'error'"
-      title="Couldn’t load the governance queue"
+      title="Couldn't load the governance queue"
       [message]="error()"
       (retry)="load()"
     ></cx-error-state>
 
     <cx-empty-state
       *ngIf="state$() === 'unavailable'"
-      icon="⚙"
-      title="Not available yet"
-      message="The petitions endpoint is not exposed by the backend yet."
+      icon="&#128203;"
+      title="No petitions found"
+      message="No petitions are currently assigned to this locality scope."
     ></cx-empty-state>
 
     <cx-empty-state
       *ngIf="state$() === 'empty'"
-      icon="◎"
+      icon="&#128269;"
       title="No petitions match these filters"
       message="Try widening the locality or clearing the status filter."
     >
@@ -140,7 +139,7 @@ import { StatusBadgeComponent } from '../../shared/components/badge.component';
           <div class="item__title">
             <a [routerLink]="['/petitions', p.id]"><h3 class="truncate">{{ p.title }}</h3></a>
             <p class="muted small">
-              {{ p.category }} · {{ p.city || '—' }}{{ p.state ? ', ' + p.state : '' }} ·
+              {{ p.category }} &bull; {{ p.city || '—' }}{{ p.state ? ', ' + p.state : '' }} &bull;
               {{ p.createdAt | date: 'mediumDate' }}
             </p>
           </div>

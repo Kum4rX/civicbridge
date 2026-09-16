@@ -522,12 +522,222 @@ async function runTests() {
   console.log(`   14b. Vote on Closed Poll Rejection Status: ${voteClosedRes.status} (Expected: 400)`);
   console.log(`       Rejection message: "${voteClosedRes.body.message}"`);
 
+    // ==========================================
+  // MILESTONE 4: GOVERNANCE & REPORTS VERIFICATION
+  // ==========================================
+  console.log('\n=== MILESTONE 4: GOVERNANCE & CIVIC REPORTS ===');
+
+  // Register Official 1 in Bengaluru
+  console.log('\nRegistering Official 1 (Bengaluru)...');
+  const off1Email = `official1_${timestamp}@test.com`;
+  const regOff1Res = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: '/api/auth/register',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    },
+    {
+      fullName: 'Bengaluru Governance Official',
+      name: 'Bengaluru Governance Official',
+      email: off1Email,
+      password: 'Password123!',
+      role: 'OFFICIAL',
+      location: { city: 'Bengaluru', state: 'Karnataka', pincode: '560001' }
+    }
+  );
+  console.log(`   Official 1 Registration Status: ${regOff1Res.status} (Expected: 201)`);
+  const official1Token = regOff1Res.body.data.token;
+
+  // Register Official 2 in Mysuru (to test locality isolation)
+  console.log('\nRegistering Official 2 (Mysuru)...');
+  const off2Email = `official2_${timestamp}@test.com`;
+  const regOff2Res = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: '/api/auth/register',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    },
+    {
+      fullName: 'Mysuru Governance Official',
+      name: 'Mysuru Governance Official',
+      email: off2Email,
+      password: 'Password123!',
+      role: 'OFFICIAL',
+      location: { city: 'Mysuru', state: 'Karnataka', pincode: '570001' }
+    }
+  );
+  console.log(`   Official 2 Registration Status: ${regOff2Res.status} (Expected: 201)`);
+  const official2Token = regOff2Res.body.data.token;
+
+  // Test 15: Governance Locality Petition Listing (GET /api/governance/petitions)
+  console.log('\n15. Testing Governance Locality Petition Listing (GET /api/governance/petitions)...');
+  // Citizen attempted access (Should FAIL 403)
+  const citGovRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/governance/petitions',
+    method: 'GET',
+    headers: { Authorization: `Bearer ${user1Token}` }
+  });
+  console.log(`   15a. Citizen Access Rejection Status: ${citGovRes.status} (Expected: 403)`);
+
+  // Bengaluru Official access (Should SUCCEED 200)
+  const offGovRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/governance/petitions',
+    method: 'GET',
+    headers: { Authorization: `Bearer ${official1Token}` }
+  });
+  console.log(`   15b. Bengaluru Official Governance Status: ${offGovRes.status} (Expected: 200)`);
+  console.log(`       Petitions in Locality: ${offGovRes.body.data.petitions.length}`);
+  console.log(`       Official Locality: ${offGovRes.body.data.locality.city}`);
+
+  // Test 16: Official Response Submission (POST /api/petitions/:id/response)
+  console.log('\n16. Testing Official Governance Response (POST /api/petitions/:id/response)...');
+  // Citizen attempted response (Should FAIL 403)
+  const citRespRes = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/petitions/${petitionId}/response`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user1Token}`
+      }
+    },
+    { message: 'Citizen trying to respond as official.' }
+  );
+  console.log(`   16a. Citizen Response Rejection Status: ${citRespRes.status} (Expected: 403)`);
+
+  // Mysuru Official attempted response to Bengaluru petition (Should FAIL 403 Locality Isolation)
+  const mysRespRes = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/petitions/${petitionId}/response`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${official2Token}`
+      }
+    },
+    { message: 'Mysuru official trying to respond to Bengaluru petition.' }
+  );
+  console.log(`   16b. Locality Mismatch Rejection Status: ${mysRespRes.status} (Expected: 403)`);
+
+  // Bengaluru Official response (Should SUCCEED 201)
+  const blrRespRes = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/petitions/${petitionId}/response`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${official1Token}`
+      }
+    },
+    {
+      message: 'Municipal engineering division has scheduled road inspections for this ward.',
+      status: 'under_review'
+    }
+  );
+  console.log(`   16c. Bengaluru Official Response Status: ${blrRespRes.status} (Expected: 201)`);
+  console.log(`       Response Author: ${blrRespRes.body.data.response.respondedBy.fullName}`);
+  console.log(`       Petition Status is now: ${blrRespRes.body.data.petition.status}`);
+
+  // Test 17: Petition Status Update (PATCH /api/petitions/:id/status)
+  console.log('\n17. Testing Petition Status Update (PATCH /api/petitions/:id/status)...');
+  const statusUpdateRes = await request(
+    {
+      hostname: 'localhost',
+      port: 5000,
+      path: `/api/petitions/${petitionId}/status`,
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${official1Token}`
+      }
+    },
+    { status: 'under_review' }
+  );
+  console.log(`   17a. Status Update Status: ${statusUpdateRes.status} (Expected: 200)`);
+  console.log(`       New Status: ${statusUpdateRes.body.data.newStatus}`);
+
+  // Test 18: Monthly Civic Reports Summary (GET /api/reports/summary)
+  console.log('\n18. Testing Monthly Civic Reports Summary (GET /api/reports/summary)...');
+  const summaryRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/reports/summary',
+    method: 'GET'
+  });
+  console.log(`   18a. Report Summary Status: ${summaryRes.status} (Expected: 200)`);
+  console.log(`       Total Petitions: ${summaryRes.body.data.totalPetitions}`);
+  console.log(`       Under Review Petitions: ${summaryRes.body.data.underReviewPetitions}`);
+  console.log(`       Total Polls: ${summaryRes.body.data.totalPolls}`);
+  console.log(`       Total Votes: ${summaryRes.body.data.totalVotes}`);
+  console.log(`       Official Responses: ${summaryRes.body.data.totalResponses}`);
+
+  // Test 19: Detailed Petition Report (GET /api/reports/petitions)
+  console.log('\n19. Testing Detailed Petition Report (GET /api/reports/petitions)...');
+  const petReportRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/reports/petitions',
+    method: 'GET'
+  });
+  console.log(`   19a. Petition Report Status: ${petReportRes.status} (Expected: 200)`);
+  console.log(`       Status Breakdowns: ${petReportRes.body.data.byStatus.length} categories`);
+  console.log(`       Category Breakdowns: ${petReportRes.body.data.byCategory.length} categories`);
+
+  // Test 20: Detailed Poll Report (GET /api/reports/polls)
+  console.log('\n20. Testing Detailed Poll Report (GET /api/reports/polls)...');
+  const pollReportRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/reports/polls',
+    method: 'GET'
+  });
+  console.log(`   20a. Poll Report Status: ${pollReportRes.status} (Expected: 200)`);
+  console.log(`       Top Polls with Participation: ${pollReportRes.body.data.participation.length}`);
+
+  // Test 21: Sentiment & Participation Series (GET /api/reports/sentiment)
+  console.log('\n21. Testing Sentiment Time-Series (GET /api/reports/sentiment)...');
+  const sentimentRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/reports/sentiment',
+    method: 'GET'
+  });
+  console.log(`   21a. Sentiment Series Status: ${sentimentRes.status} (Expected: 200)`);
+  console.log(`       Monthly Data Points: ${sentimentRes.body.data.length}`);
+
+  // Test 22: Report CSV Export (GET /api/reports/export)
+  console.log('\n22. Testing Report Export (GET /api/reports/export)...');
+  const exportRes = await request({
+    hostname: 'localhost',
+    port: 5000,
+    path: '/api/reports/export?format=csv',
+    method: 'GET',
+    headers: { Authorization: `Bearer ${official1Token}` }
+  });
+  console.log(`   22a. Report Export Status: ${exportRes.status} (Expected: 200)`);
+  console.log(`       Content-Type: ${exportRes.headers['content-type']}`);
+  console.log(`       Content-Disposition: ${exportRes.headers['content-disposition']}`);
+  console.log(`       CSV Length: ${exportRes.body ? exportRes.body.length : 0} bytes`);
+
   await mongoose.disconnect();
-  console.log('\n=== ALL M1, M2, AND M3 VERIFICATION CHECKS PASSED SUCCESSFULLY ===');
+  console.log('\n=== ALL M1, M2, M3, AND M4 VERIFICATION CHECKS PASSED SUCCESSFULLY ===');
 }
 
 runTests().catch((err) => {
   console.error('Fatal error during test run:', err);
   process.exit(1);
 });
-

@@ -19,11 +19,6 @@ interface Metric {
   hint: string;
 }
 
-/**
- * Milestone 4 — reports & analytics.
- * Every section is driven by the real reports API. Endpoints the backend does
- * not expose (404/501) render an explicit "Not available" state — never mock data.
- */
 @Component({
   selector: 'cx-reports',
   standalone: true,
@@ -59,6 +54,34 @@ interface Metric {
     <section class="card filters" aria-label="Filter reports">
       <div class="filters__grid">
         <label class="field">
+          <span class="field__label">Month</span>
+          <select class="input" [(ngModel)]="month">
+            <option value="">All months</option>
+            <option value="1">January</option>
+            <option value="2">February</option>
+            <option value="3">March</option>
+            <option value="4">April</option>
+            <option value="5">May</option>
+            <option value="6">June</option>
+            <option value="7">July</option>
+            <option value="8">August</option>
+            <option value="9">September</option>
+            <option value="10">October</option>
+            <option value="11">November</option>
+            <option value="12">December</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">Year</span>
+          <select class="input" [(ngModel)]="year">
+            <option value="">All years</option>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+            <option value="2027">2027</option>
+          </select>
+        </label>
+        <label class="field">
           <span class="field__label">City</span>
           <input class="input" [(ngModel)]="city" placeholder="All cities" />
         </label>
@@ -66,19 +89,11 @@ interface Metric {
           <span class="field__label">State</span>
           <input class="input" [(ngModel)]="state" placeholder="All states" />
         </label>
-        <label class="field">
-          <span class="field__label">From</span>
-          <input class="input" type="date" [(ngModel)]="from" />
-        </label>
-        <label class="field">
-          <span class="field__label">To</span>
-          <input class="input" type="date" [(ngModel)]="to" />
-        </label>
       </div>
       <div class="row filters__actions">
-        <button class="btn btn--primary btn--sm" (click)="loadAll()">Apply</button>
+        <button class="btn btn--primary btn--sm" (click)="loadAll()">Apply filters</button>
         <button class="btn btn--ghost btn--sm" (click)="useMyLocality()">My locality</button>
-        <button class="btn btn--ghost btn--sm" (click)="clear()">Clear</button>
+        <button class="btn btn--ghost btn--sm" (click)="clear()">Clear filters</button>
       </div>
     </section>
 
@@ -87,16 +102,16 @@ interface Metric {
 
     <cx-error-state
       *ngIf="summaryState() === 'error'"
-      title="Couldn’t load the summary"
+      title="Couldn't load the summary"
       [message]="summaryError()"
       (retry)="loadSummary()"
     ></cx-error-state>
 
     <cx-empty-state
       *ngIf="summaryState() === 'unavailable'"
-      icon="⚙"
+      icon="&#128202;"
       title="Summary not available"
-      message="The reports summary endpoint is not exposed by the backend yet."
+      message="No engagement records found for the selected scope."
     ></cx-empty-state>
 
     <section class="grid grid-4 metrics" *ngIf="summaryState() === 'loaded'">
@@ -114,19 +129,19 @@ interface Metric {
         <cx-loader
           *ngIf="petitionState() === 'loading'"
           variant="inline"
-          label="Loading petition analytics…"
+          label="Loading petition analytics..."
         ></cx-loader>
         <cx-error-state
           *ngIf="petitionState() === 'error'"
-          title="Couldn’t load petition analytics"
+          title="Couldn't load petition analytics"
           [message]="petitionError()"
           (retry)="loadPetitionStats()"
         ></cx-error-state>
-        <p class="muted small" *ngIf="petitionState() === 'unavailable'">
-          Not available — the backend does not expose petition report analytics.
+        <p class="muted small" *ngIf="petitionState() === 'loaded' && !petitionByStatus().length">
+          No petition status data in this scope.
         </p>
         <cx-donut-chart
-          *ngIf="petitionState() === 'loaded'"
+          *ngIf="petitionState() === 'loaded' && petitionByStatus().length"
           [data]="petitionByStatus()"
           centerLabel="petitions"
           ariaLabel="Petitions by status"
@@ -138,13 +153,13 @@ interface Metric {
         <cx-loader
           *ngIf="petitionState() === 'loading'"
           variant="inline"
-          label="Loading categories…"
+          label="Loading categories..."
         ></cx-loader>
-        <p class="muted small" *ngIf="petitionState() === 'unavailable'">
-          Not available — the backend does not expose petition report analytics.
+        <p class="muted small" *ngIf="petitionState() === 'loaded' && !petitionByCategory().length">
+          No category distribution data in this scope.
         </p>
         <cx-bar-chart
-          *ngIf="petitionState() === 'loaded'"
+          *ngIf="petitionState() === 'loaded' && petitionByCategory().length"
           [data]="petitionByCategory()"
           ariaLabel="Petitions by category"
         ></cx-bar-chart>
@@ -158,19 +173,19 @@ interface Metric {
         <cx-loader
           *ngIf="pollState() === 'loading'"
           variant="inline"
-          label="Loading poll analytics…"
+          label="Loading poll analytics..."
         ></cx-loader>
         <cx-error-state
           *ngIf="pollState() === 'error'"
-          title="Couldn’t load poll analytics"
+          title="Couldn't load poll analytics"
           [message]="pollError()"
           (retry)="loadPollStats()"
         ></cx-error-state>
-        <p class="muted small" *ngIf="pollState() === 'unavailable'">
-          Not available — the backend does not expose poll report analytics.
+        <p class="muted small" *ngIf="pollState() === 'loaded' && !pollByStatus().length">
+          No poll status data in this scope.
         </p>
         <cx-donut-chart
-          *ngIf="pollState() === 'loaded'"
+          *ngIf="pollState() === 'loaded' && pollByStatus().length"
           [data]="pollByStatus()"
           centerLabel="polls"
           ariaLabel="Polls by status"
@@ -182,13 +197,13 @@ interface Metric {
         <cx-loader
           *ngIf="pollState() === 'loading'"
           variant="inline"
-          label="Loading participation…"
+          label="Loading participation..."
         ></cx-loader>
-        <p class="muted small" *ngIf="pollState() === 'unavailable'">
-          Not available — the backend does not expose poll report analytics.
+        <p class="muted small" *ngIf="pollState() === 'loaded' && !pollParticipation().length">
+          No poll participation data in this scope.
         </p>
         <cx-bar-chart
-          *ngIf="pollState() === 'loaded'"
+          *ngIf="pollState() === 'loaded' && pollParticipation().length"
           [data]="pollParticipation()"
           color="var(--c-accent, #0f9d8f)"
           ariaLabel="Poll participation"
@@ -202,26 +217,20 @@ interface Metric {
       <cx-bar-chart [data]="monthlyTrend()" ariaLabel="Monthly petition activity"></cx-bar-chart>
     </section>
 
-    <!-- Sentiment (integration point) -->
+    <!-- Sentiment trend -->
     <section class="card">
-      <h2 class="card__title">Public sentiment trend</h2>
+      <h2 class="card__title">Public sentiment & voting trend</h2>
       <cx-loader
         *ngIf="sentimentState() === 'loading'"
         variant="inline"
-        label="Loading sentiment…"
+        label="Loading sentiment..."
       ></cx-loader>
       <cx-error-state
         *ngIf="sentimentState() === 'error'"
-        title="Couldn’t load sentiment"
+        title="Couldn't load sentiment"
         [message]="sentimentError()"
         (retry)="loadSentiment()"
       ></cx-error-state>
-      <cx-empty-state
-        *ngIf="sentimentState() === 'unavailable'"
-        icon="⚙"
-        title="Not available"
-        message="This backend does not expose a sentiment endpoint, so no trend is shown."
-      ></cx-empty-state>
       <cx-bar-chart
         *ngIf="sentimentState() === 'loaded'"
         [data]="sentimentSeries()"
@@ -229,10 +238,6 @@ interface Metric {
         ariaLabel="Public sentiment trend"
       ></cx-bar-chart>
     </section>
-
-    <p class="muted small export-note" *ngIf="exportState() === 'unavailable'">
-      Data export is not available — the backend does not expose a report export endpoint.
-    </p>
   `,
   styles: [
     `
@@ -241,7 +246,7 @@ interface Metric {
       }
       .filters__grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
         gap: 14px;
       }
       .filters__actions {
@@ -266,9 +271,6 @@ interface Metric {
         font-size: 1.05rem;
         margin-bottom: 16px;
       }
-      .export-note {
-        margin-top: 16px;
-      }
     `,
   ],
 })
@@ -277,6 +279,8 @@ export class ReportsPage implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly notify = inject(NotificationService);
 
+  month = '';
+  year = '2026';
   city = '';
   state = '';
   from = '';
@@ -312,6 +316,8 @@ export class ReportsPage implements OnInit {
 
   private query(): ReportQuery {
     return {
+      month: this.month ? parseInt(this.month, 10) : undefined,
+      year: this.year ? parseInt(this.year, 10) : undefined,
       city: this.city.trim() || undefined,
       state: this.state.trim() || undefined,
       from: this.from || undefined,
@@ -327,6 +333,8 @@ export class ReportsPage implements OnInit {
   }
 
   clear(): void {
+    this.month = '';
+    this.year = '';
     this.city = '';
     this.state = '';
     this.from = '';
@@ -347,7 +355,7 @@ export class ReportsPage implements OnInit {
     this.reports.summary(this.query()).subscribe({
       next: (summary) => {
         this.metrics.set(this.toMetrics(summary));
-        this.summaryState.set(this.metrics().length ? 'loaded' : 'unavailable');
+        this.summaryState.set('loaded');
       },
       error: (err) => this.fail(err, this.summaryState, this.summaryError),
     });
@@ -386,7 +394,7 @@ export class ReportsPage implements OnInit {
     this.reports.sentiment(this.query()).subscribe({
       next: (series) => {
         this.sentimentSeries.set(this.fromMonthly(series));
-        this.sentimentState.set(this.sentimentSeries().length ? 'loaded' : 'unavailable');
+        this.sentimentState.set('loaded');
       },
       error: (err) => this.fail(err, this.sentimentState, this.sentimentError),
     });
@@ -400,17 +408,13 @@ export class ReportsPage implements OnInit {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `civix-report.${format}`;
+        const period = this.month && this.year ? `${this.year}-${this.month}` : 'latest';
+        link.download = `civicbridge-report-${period}.${format}`;
         link.click();
         URL.revokeObjectURL(url);
-        this.notify.success('Report downloaded.');
+        this.notify.success('Report downloaded successfully.');
       },
       error: (err) => {
-        if (isUnavailable(err)) {
-          this.exportState.set('unavailable');
-          this.notify.info('Export is not available on this backend.');
-          return;
-        }
         this.exportState.set('idle');
         this.notify.error(apiErrorMessage(err, 'Could not export the report.'));
       },
@@ -451,13 +455,16 @@ export class ReportsPage implements OnInit {
     if (!summary) return [];
     const defs: { key: string; label: string; hint: string }[] = [
       { key: 'totalPetitions', label: 'Total petitions', hint: 'Raised in this scope' },
+      { key: 'newPetitions', label: 'New petitions', hint: 'In selected period' },
       { key: 'activePetitions', label: 'Active petitions', hint: 'Currently collecting support' },
+      { key: 'underReviewPetitions', label: 'Under review', hint: 'Awaiting official action' },
+      { key: 'closedPetitions', label: 'Closed petitions', hint: 'Resolved or expired' },
       { key: 'totalSignatures', label: 'Total signatures', hint: 'Citizen endorsements' },
+      { key: 'totalResponses', label: 'Official responses', hint: 'Published governance responses' },
       { key: 'totalPolls', label: 'Total polls', hint: 'Published by officials' },
       { key: 'activePolls', label: 'Active polls', hint: 'Open for voting' },
       { key: 'totalVotes', label: 'Total votes', hint: 'Across all polls' },
-      { key: 'underReviewPetitions', label: 'Under review', hint: 'Awaiting official action' },
-      { key: 'closedPetitions', label: 'Closed petitions', hint: 'Resolved or expired' },
+      { key: 'totalParticipation', label: 'Poll participation', hint: 'Total civic engagements' },
     ];
     return defs
       .filter((d) => typeof summary[d.key] === 'number')

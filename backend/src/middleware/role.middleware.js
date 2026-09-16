@@ -1,8 +1,8 @@
-const { sendError } = require('../utils/response');
+﻿const { sendError } = require('../utils/response');
 
 /**
  * Middleware to restrict route access to specific user roles
- * @param  {...string} allowedRoles - List of authorized roles (e.g. 'official', 'citizen')
+ * @param  {...string} allowedRoles - List of authorized roles (e.g. 'OFFICIAL', 'official')
  */
 const authorize = (...allowedRoles) => {
   return (req, res, next) => {
@@ -10,11 +10,14 @@ const authorize = (...allowedRoles) => {
       return sendError(res, 401, 'Authentication is required');
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const userRole = (req.user.role || '').toUpperCase();
+    const allowed = allowedRoles.map((r) => (r || '').toUpperCase());
+
+    if (!allowed.includes(userRole)) {
       return sendError(
         res,
         403,
-        `Access denied. Requires one of the following roles: ${allowedRoles.join(', ')}`
+        'Access denied. Requires one of the following roles: ' + allowedRoles.join(', ')
       );
     }
 

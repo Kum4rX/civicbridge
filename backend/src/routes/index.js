@@ -23,4 +23,12 @@ router.use('/petitions', petitionRoutes);
 const pollRoutes = require('./poll.routes');
 router.use('/polls', pollRoutes);
 
+// Governance routes (Milestone 4)
+const governanceRoutes = require('./governance.routes');
+router.use('/governance', governanceRoutes);
+
+// Report routes (Milestone 4)
+const reportRoutes = require('./report.routes');
+router.use('/reports', reportRoutes);
+
 module.exports = router;

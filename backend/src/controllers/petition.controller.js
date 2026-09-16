@@ -20,7 +20,8 @@ class PetitionController {
    */
   async getPetitions(req, res, next) {
     try {
-      const result = await petitionService.findAll(req.query);
+      const userId = req.user ? (req.user._id || req.user.id) : null;
+      const result = await petitionService.findAll(req.query, userId);
       return sendSuccess(res, 200, 'Petitions retrieved successfully', result);
     } catch (error) {
       next(error);
@@ -45,7 +46,8 @@ class PetitionController {
    */
   async getPetitionById(req, res, next) {
     try {
-      const petition = await petitionService.findById(req.params.id);
+      const userId = req.user ? (req.user._id || req.user.id) : null;
+      const petition = await petitionService.findById(req.params.id, userId);
       return sendSuccess(res, 200, 'Petition retrieved successfully', { petition });
     } catch (error) {
       next(error);
@@ -77,6 +79,67 @@ class PetitionController {
       const userId = req.user._id || req.user.id;
       const result = await petitionService.delete(req.params.id, userId);
       return sendSuccess(res, 200, 'Petition deleted successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Sign a petition
+   */
+  async signPetition(req, res, next) {
+    try {
+      const userId = req.user._id || req.user.id;
+      const result = await petitionService.sign(req.params.id, userId);
+      return sendSuccess(res, 200, 'Petition signed successfully', { petition: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get petitions signed by current user
+   */
+  async getSignedPetitions(req, res, next) {
+    try {
+      const userId = req.user._id || req.user.id;
+      const result = await petitionService.findSignedByUser(userId, req.query);
+      return sendSuccess(res, 200, 'Signed petitions retrieved successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Add official response to petition
+   */
+  async addResponse(req, res, next) {
+    try {
+      const { message, status } = req.body;
+      const result = await petitionService.addResponse(
+        req.params.id,
+        req.user,
+        message,
+        status
+      );
+      return sendSuccess(res, 201, 'Official response added successfully', result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Update petition status by authorized official
+   */
+  async updateStatus(req, res, next) {
+    try {
+      const { status } = req.body;
+      const result = await petitionService.updateStatus(
+        req.params.id,
+        req.user,
+        status
+      );
+      return sendSuccess(res, 200, 'Petition status updated successfully', result);
     } catch (error) {
       next(error);
     }

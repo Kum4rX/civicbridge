@@ -29,13 +29,13 @@ import { LoaderComponent } from '../../shared/components/loader.component';
     LoaderComponent,
   ],
   template: `
-    <a routerLink="/petitions" class="back">← Back to petitions</a>
+    <a routerLink="/petitions" class="back">&larr; Back to petitions</a>
 
     <cx-loader *ngIf="state() === 'loading'" variant="rows" [count]="4"></cx-loader>
 
     <cx-error-state
       *ngIf="state() === 'error'"
-      title="Couldn’t load this petition"
+      title="Couldn't load this petition"
       [message]="error()"
       (retry)="load()"
     ></cx-error-state>
@@ -53,8 +53,8 @@ import { LoaderComponent } from '../../shared/components/loader.component';
             <h1>{{ p.title }}</h1>
             <p class="muted small meta">
               <span *ngIf="p.creator?.fullName">Started by <strong>{{ p.creator?.fullName }}</strong></span>
-              <span *ngIf="p.createdAt"> · {{ p.createdAt | date: 'mediumDate' }}</span>
-              <span *ngIf="location()"> · {{ location() }}</span>
+              <span *ngIf="p.createdAt"> &bull; {{ p.createdAt | date: 'mediumDate' }}</span>
+              <span *ngIf="location()"> &bull; {{ location() }}</span>
             </p>
           </header>
 
@@ -90,6 +90,36 @@ import { LoaderComponent } from '../../shared/components/loader.component';
                 </div>
               </li>
             </ol>
+
+            <!-- Official Inline Response Box -->
+            <div *ngIf="auth.isOfficial()" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--c-border)">
+              <button class="btn btn--subtle btn--sm" *ngIf="!showRespondBox()" (click)="showRespondBox.set(true)">
+                Add official response
+              </button>
+              <div class="stack" style="gap:10px" *ngIf="showRespondBox()">
+                <label class="field">
+                  <span class="field__label">Official message</span>
+                  <textarea
+                    class="input"
+                    rows="3"
+                    [(ngModel)]="responseMessage"
+                    placeholder="Explain the decision, next steps or timelines for the community..."
+                  ></textarea>
+                </label>
+                <div class="row" style="gap:8px">
+                  <button
+                    class="btn btn--primary btn--sm"
+                    [disabled]="responding() || !responseMessage.trim()"
+                    (click)="submitResponse()"
+                  >
+                    <span class="spinner" *ngIf="responding()"></span>Post response
+                  </button>
+                  <button class="btn btn--ghost btn--sm" [disabled]="responding()" (click)="showRespondBox.set(false)">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
           </section>
         </article>
 
@@ -98,25 +128,32 @@ import { LoaderComponent } from '../../shared/components/loader.component';
           <div class="card sign">
             <div class="spread">
               <strong class="big">{{ p.signaturesCount | number }}</strong>
-              <span class="muted small">of {{ p.targetSignatures | number }} goal</span>
+              <span class="muted small">goal: {{ p.targetSignatures | number }}</span>
             </div>
-            <div class="progress" role="progressbar" [attr.aria-valuenow]="pct()" aria-valuemin="0" aria-valuemax="100">
-              <div class="progress__bar" [style.width.%]="pct()"></div>
+
+            <div class="progress" aria-hidden="true">
+              <div class="progress__fill" [style.width.%]="pct()"></div>
             </div>
-            <p class="muted small">{{ pct() }}% of the goal · {{ remaining() | number }} more needed</p>
+
+            <p class="muted small" *ngIf="remaining() > 0">
+              <strong>{{ remaining() | number }}</strong> more signatures needed to reach the target.
+            </p>
+            <p class="muted small" *ngIf="remaining() === 0">
+              Goal reached! This petition is awaiting official review.
+            </p>
 
             <ng-container *ngIf="auth.isCitizen()">
               <button
-                *ngIf="!p.hasSigned"
-                class="btn btn--primary btn--block"
-                [disabled]="signing() || p.status !== 'ACTIVE'"
+                class="btn btn--primary btn--block btn--lg"
+                *ngIf="!p.hasSigned && p.status === 'ACTIVE'"
+                [disabled]="signing()"
                 (click)="sign()"
               >
-                <span class="spinner" *ngIf="signing()"></span>
-                {{ p.status === 'ACTIVE' ? 'Sign this petition' : 'Signing closed' }}
+                <span class="spinner" *ngIf="signing()"></span>Sign this petition
               </button>
+
               <div class="signed" *ngIf="p.hasSigned">
-                <span aria-hidden="true">✓</span>
+                <span>&check;</span>
                 <div>
                   <strong>You signed this petition</strong>
                   <p class="muted small" *ngIf="p.signedAt">{{ p.signedAt | date: 'mediumDate' }}</p>
@@ -141,11 +178,24 @@ import { LoaderComponent } from '../../shared/components/loader.component';
             </div>
           </div>
 
+          <!-- Official Governance Status Control -->
           <div class="card" *ngIf="auth.isOfficial()">
             <h3 class="section-title">Official status</h3>
-            <p class="muted small" style="margin-top:8px">
-              Official petition status changes will be available in Milestone 4.
+            <p class="muted small" style="margin-top:4px">
+              Update governance review status for this petition.
             </p>
+            <div class="stack" style="gap:10px;margin-top:12px">
+              <select class="input" [(ngModel)]="statusDraft">
+                <option *ngFor="let s of statuses" [value]="s">{{ prettyStatus(s) }}</option>
+              </select>
+              <button
+                class="btn btn--primary btn--block btn--sm"
+                [disabled]="statusBusy() || statusDraft === p.status"
+                (click)="updateStatus()"
+              >
+                <span class="spinner" *ngIf="statusBusy()"></span>Update status
+              </button>
+            </div>
           </div>
 
           <div class="card details">
@@ -219,6 +269,10 @@ export class PetitionDetailPage implements OnInit {
   readonly confirmDelete = signal(false);
   statusDraft: PetitionStatus = 'ACTIVE';
 
+  readonly showRespondBox = signal(false);
+  readonly responding = signal(false);
+  responseMessage = '';
+
   readonly pct = computed(() => {
     const p = this.petition();
     if (!p || !p.targetSignatures) return 0;
@@ -245,6 +299,10 @@ export class PetitionDetailPage implements OnInit {
 
   ngOnInit(): void {
     this.load();
+  }
+
+  prettyStatus(status: string): string {
+    return status.toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
   }
 
   load(): void {
@@ -310,6 +368,24 @@ export class PetitionDetailPage implements OnInit {
       error: (err) => {
         this.statusBusy.set(false);
         this.toast.error(apiErrorMessage(err, 'Could not update the status.'));
+      },
+    });
+  }
+
+  submitResponse(): void {
+    if (!this.responseMessage.trim()) return;
+    this.responding.set(true);
+    this.api.respond(this.id, this.responseMessage.trim()).subscribe({
+      next: () => {
+        this.responding.set(false);
+        this.responseMessage = '';
+        this.showRespondBox.set(false);
+        this.toast.success('Official response posted.');
+        this.load();
+      },
+      error: (err) => {
+        this.responding.set(false);
+        this.toast.error(apiErrorMessage(err, 'Could not post the official response.'));
       },
     });
   }
