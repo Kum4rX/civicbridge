@@ -9,6 +9,8 @@ const authenticate = require('../src/middleware/auth.middleware');
 const authorize = require('../src/middleware/role.middleware');
 const { errorHandler } = require('../src/middleware/error.middleware');
 const { sendSuccess } = require('../src/utils/response');
+const emailService = require('../src/services/email.service');
+const { _resetRateLimits } = require('../src/middleware/rate-limit.middleware');
 
 let mongoServer;
 jest.setTimeout(60000);
@@ -419,4 +421,461 @@ describe('Civix Phase 1 Backend API Tests', () => {
       expect(JSON.stringify(meRes.body)).not.toContain('SuperSecretPassword123!');
     });
   });
+
+  describe('Profile Update (PUT /api/auth/profile and PUT /api/users/profile)', () => {
+    let citizenToken;
+    let citizenUser;
+    let otherUserToken;
+
+    beforeEach(async () => {
+      const regRes = await request(app).post('/api/auth/register').send({
+        fullName: 'Jane Citizen',
+        name: 'Jane Citizen',
+        email: 'jane@example.com',
+        password: 'Password123!',
+        role: 'CITIZEN',
+        location: {
+          address: '123 Main St',
+          city: 'Mysuru',
+          state: 'Karnataka',
+          pincode: '570001'
+        }
+      });
+      citizenToken = regRes.body.data.token;
+      citizenUser = regRes.body.data.user;
+
+      const otherRes = await request(app).post('/api/auth/register').send({
+        fullName: 'Other User',
+        name: 'Other User',
+        email: 'other@example.com',
+        password: 'Password123!',
+        role: 'CITIZEN'
+      });
+      otherUserToken = otherRes.body.data.token;
+    });
+
+    it('should successfully update full name, email, street address, city, state, and pin code via /api/users/profile', async () => {
+      const updateData = {
+        fullName: 'Jane Doe Updated',
+        email: 'jane.updated@example.com',
+        address: '456 Residency Road',
+        city: 'Bengaluru',
+        state: 'Karnataka',
+        pincode: '560025'
+      };
+
+      const res = await request(app)
+        .put('/api/users/profile')
+        .set('Authorization', `Bearer ${citizenToken}`)
+        .send(updateData);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toContain('Profile updated');
+      expect(res.body.data.user.fullName).toBe('Jane Doe Updated');
+      expect(res.body.data.user.email).toBe('jane.updated@example.com');
+      expect(res.body.data.user.location.address).toBe('456 Residency Road');
+      expect(res.body.data.user.location.city).toBe('Bengaluru');
+      expect(res.body.data.user.location.state).toBe('Karnataka');
+      expect(res.body.data.user.location.pincode).toBe('560025');
+
+      // Verify persistence in MongoDB
+      const dbUser = await User.findById(citizenUser._id || citizenUser.id);
+      expect(dbUser.fullName).toBe('Jane Doe Updated');
+      expect(dbUser.email).toBe('jane.updated@example.com');
+      expect(dbUser.location.address).toBe('456 Residency Road');
+    });
+
+    it('should successfully update profile via /api/auth/profile route as well', async () => {
+      const res = await request(app)
+        .put('/api/auth/profile')
+        .set('Authorization', `Bearer ${citizenToken}`)
+        .send({
+          fullName: 'Jane Via Auth Route',
+          city: 'Mangaluru',
+          state: 'Karnataka'
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.user.fullName).toBe('Jane Via Auth Route');
+      expect(res.body.data.user.location.city).toBe('Mangaluru');
+    });
+
+    it('should reject unauthenticated profile update (401)', async () => {
+      const res = await request(app)
+        .put('/api/users/profile')
+        .send({ fullName: 'Unauthenticated Hacker' });
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should reject duplicate email already used by another user (400)', async () => {
+      const res = await request(app)
+        .put('/api/users/profile')
+        .set('Authorization', `Bearer ${citizenToken}`)
+        .send({ email: 'other@example.com' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toContain('already registered');
+    });
+
+    it('should reject invalid email format (400)', async () => {
+      const res = await request(app)
+        .put('/api/users/profile')
+        .set('Authorization', `Bearer ${citizenToken}`)
+        .send({ email: 'not-a-valid-email' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should reject invalid PIN code format (400)', async () => {
+      const res = await request(app)
+        .put('/api/users/profile')
+        .set('Authorization', `Bearer ${citizenToken}`)
+        .send({ pincode: 'abc12' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should protect immutable fields (role, verified, _id) from modification', async () => {
+      const res = await request(app)
+        .put('/api/users/profile')
+        .set('Authorization', `Bearer ${citizenToken}`)
+        .send({
+          fullName: 'Jane Protected Test',
+          role: 'OFFICIAL',
+          verified: true,
+          _id: new mongoose.Types.ObjectId()
+        });
+
+      expect(res.status).toBe(200);
+
+      // Verify in MongoDB that role and verified remain untampered
+      const dbUser = await User.findById(citizenUser._id || citizenUser.id);
+      expect(dbUser.role).toBe('CITIZEN');
+      expect(dbUser.verified).toBe(false);
+    });
+  });
+
+  describe('Change Password (PUT /api/auth/change-password and PUT /api/users/change-password)', () => {
+    let userToken;
+    let userEmail = 'pwdchange@example.com';
+    let currentPassword = 'CurrentPassword123!';
+
+    beforeEach(async () => {
+      const regRes = await request(app).post('/api/auth/register').send({
+        fullName: 'Password Changer',
+        email: userEmail,
+        password: currentPassword,
+        role: 'CITIZEN'
+      });
+      userToken = regRes.body.data.token;
+    });
+
+    it('should reject unauthenticated password change (401)', async () => {
+      const res = await request(app)
+        .put('/api/auth/change-password')
+        .send({
+          currentPassword,
+          newPassword: 'NewSecurePassword123!',
+          confirmPassword: 'NewSecurePassword123!'
+        });
+
+      expect(res.status).toBe(401);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should reject when current password is incorrect (400)', async () => {
+      const res = await request(app)
+        .put('/api/auth/change-password')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          currentPassword: 'WrongPassword999!',
+          newPassword: 'NewSecurePassword123!',
+          confirmPassword: 'NewSecurePassword123!'
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toContain('Current password is incorrect');
+    });
+
+    it('should reject when new password and confirm password do not match (400)', async () => {
+      const res = await request(app)
+        .put('/api/auth/change-password')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          currentPassword,
+          newPassword: 'NewSecurePassword123!',
+          confirmPassword: 'MismatchedPassword123!'
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should reject when new password is identical to current password (400)', async () => {
+      const res = await request(app)
+        .put('/api/auth/change-password')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          currentPassword,
+          newPassword: currentPassword,
+          confirmPassword: currentPassword
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toContain('different from current');
+    });
+
+    it('should successfully change password with valid inputs and allow login with new password', async () => {
+      const newPassword = 'BrandNewPassword789!';
+
+      const res = await request(app)
+        .put('/api/auth/change-password')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          currentPassword,
+          newPassword,
+          confirmPassword: newPassword
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toContain('Password changed successfully');
+
+      // Attempt login with old password -> must fail
+      const oldLoginRes = await request(app).post('/api/auth/login').send({
+        email: userEmail,
+        password: currentPassword
+      });
+      expect(oldLoginRes.status).toBe(401);
+
+      // Attempt login with new password -> must succeed
+      const newLoginRes = await request(app).post('/api/auth/login').send({
+        email: userEmail,
+        password: newPassword
+      });
+      expect(newLoginRes.status).toBe(200);
+      expect(newLoginRes.body.success).toBe(true);
+      expect(newLoginRes.body.data).toHaveProperty('token');
+    });
+
+    it('should also work via /api/users/change-password route', async () => {
+      const newPassword = 'AlternativeRoutePass123!';
+
+      const res = await request(app)
+        .put('/api/users/change-password')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          currentPassword,
+          newPassword,
+          confirmPassword: newPassword
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('Forgot Password Flow (POST /api/auth/forgot-password)', () => {
+    beforeEach(() => {
+      _resetRateLimits();
+      emailService.clearTestEmails();
+    });
+
+    it('should return generic success message when email exists and record reset email', async () => {
+      const email = 'forgot_exist@example.com';
+      await request(app).post('/api/auth/register').send({
+        fullName: 'Forgot Exists User',
+        email,
+        password: 'Password123!',
+        role: 'CITIZEN'
+      });
+
+      const res = await request(app).post('/api/auth/forgot-password').send({ email });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toContain('If an account exists');
+
+      // In test mode, verify emailService recorded the reset token
+      const recorded = emailService.getLatestTestEmail(email);
+      expect(recorded).toBeDefined();
+      expect(recorded.email).toBe(email);
+      expect(recorded.resetToken).toBeDefined();
+      expect(recorded.resetToken.length).toBe(64); // 32 bytes hex = 64 chars
+    });
+
+    it('should return the same generic message when email does NOT exist (no enumeration)', async () => {
+      const res = await request(app).post('/api/auth/forgot-password').send({
+        email: 'unknown_nonexistent_user@example.com'
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toContain('If an account exists');
+
+      // Verify no email was dispatched
+      const recorded = emailService.getLatestTestEmail('unknown_nonexistent_user@example.com');
+      expect(recorded).toBeUndefined();
+    });
+
+    it('should reject invalid email formats (400)', async () => {
+      const res = await request(app).post('/api/auth/forgot-password').send({
+        email: 'invalid-email-format'
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should enforce rate limiting on repeated requests from same IP (429)', async () => {
+      _resetRateLimits();
+      const email = 'ratelimit@example.com';
+
+      // Send 5 permitted requests
+      for (let i = 0; i < 5; i++) {
+        const res = await request(app).post('/api/auth/forgot-password').send({ email });
+        expect(res.status).toBe(200);
+      }
+
+      // 6th request must trigger rate limit
+      const rateLimitedRes = await request(app).post('/api/auth/forgot-password').send({ email });
+      expect(rateLimitedRes.status).toBe(429);
+      expect(rateLimitedRes.body.success).toBe(false);
+      expect(rateLimitedRes.body.message).toContain('Too many password reset requests');
+      
+      _resetRateLimits();
+    });
+  });
+
+  describe('Reset Password Flow (POST /api/auth/reset-password)', () => {
+    let registeredEmail = 'resetflow@example.com';
+    let originalPassword = 'OriginalPassword123!';
+
+    beforeEach(async () => {
+      _resetRateLimits();
+      emailService.clearTestEmails();
+      await request(app).post('/api/auth/register').send({
+        fullName: 'Reset Flow User',
+        email: registeredEmail,
+        password: originalPassword,
+        role: 'CITIZEN'
+      });
+    });
+
+    it('should reject reset request with invalid or missing token (400)', async () => {
+      const res = await request(app).post('/api/auth/reset-password').send({
+        token: 'invalid_random_token_12345',
+        password: 'NewSecurePassword123!',
+        confirmPassword: 'NewSecurePassword123!'
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/(invalid|expired)/i);
+    });
+
+    it('should reject reset request when passwords do not match (400)', async () => {
+      const res = await request(app).post('/api/auth/reset-password').send({
+        token: 'some_token',
+        password: 'NewSecurePassword123!',
+        confirmPassword: 'MismatchPassword123!'
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    });
+
+    it('should successfully reset password with valid token and allow subsequent login', async () => {
+      // 1. Request reset
+      await request(app).post('/api/auth/forgot-password').send({ email: registeredEmail });
+      const recorded = emailService.getLatestTestEmail(registeredEmail);
+      expect(recorded).toBeDefined();
+      const validToken = recorded.resetToken;
+
+      const newPassword = 'NewlyResetPassword999!';
+
+      // 2. Perform reset
+      const resetRes = await request(app).post('/api/auth/reset-password').send({
+        token: validToken,
+        password: newPassword,
+        confirmPassword: newPassword
+      });
+
+      expect(resetRes.status).toBe(200);
+      expect(resetRes.body.success).toBe(true);
+      expect(resetRes.body.message).toContain('Password has been reset successfully');
+
+      // 3. Login with old password fails
+      const oldLogin = await request(app).post('/api/auth/login').send({
+        email: registeredEmail,
+        password: originalPassword
+      });
+      expect(oldLogin.status).toBe(401);
+
+      // 4. Login with new password succeeds
+      const newLogin = await request(app).post('/api/auth/login').send({
+        email: registeredEmail,
+        password: newPassword
+      });
+      expect(newLogin.status).toBe(200);
+      expect(newLogin.body.data).toHaveProperty('token');
+    });
+
+    it('should reject reused tokens (single-use enforcement) (400)', async () => {
+      // 1. Request reset
+      await request(app).post('/api/auth/forgot-password').send({ email: registeredEmail });
+      const validToken = emailService.getLatestTestEmail(registeredEmail).resetToken;
+
+      // 2. First reset succeeds
+      const firstRes = await request(app).post('/api/auth/reset-password').send({
+        token: validToken,
+        password: 'FirstResetPassword123!',
+        confirmPassword: 'FirstResetPassword123!'
+      });
+      expect(firstRes.status).toBe(200);
+
+      // 3. Second attempt with SAME token must fail
+      const secondRes = await request(app).post('/api/auth/reset-password').send({
+        token: validToken,
+        password: 'SecondResetPassword123!',
+        confirmPassword: 'SecondResetPassword123!'
+      });
+      expect(secondRes.status).toBe(400);
+      expect(secondRes.body.success).toBe(false);
+      expect(secondRes.body.message).toMatch(/(invalid|expired)/i);
+    });
+
+    it('should reject expired reset tokens (400)', async () => {
+      // 1. Request reset
+      await request(app).post('/api/auth/forgot-password').send({ email: registeredEmail });
+      const validToken = emailService.getLatestTestEmail(registeredEmail).resetToken;
+
+      // 2. Expire the token directly in the database
+      await User.updateOne(
+        { email: registeredEmail },
+        { passwordResetExpires: new Date(Date.now() - 60000) } // 1 minute in the past
+      );
+
+      // 3. Attempt reset with expired token
+      const res = await request(app).post('/api/auth/reset-password').send({
+        token: validToken,
+        password: 'ExpiredTokenNewPassword123!',
+        confirmPassword: 'ExpiredTokenNewPassword123!'
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.message).toMatch(/(invalid|expired)/i);
+    });
+  });
+
 });
