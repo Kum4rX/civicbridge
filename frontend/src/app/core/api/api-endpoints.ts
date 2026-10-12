@@ -1,39 +1,55 @@
+import { environment } from '../../../environments/environment';
+
+/**
+ * SINGLE SOURCE OF TRUTH for the existing backend contract.
+ * If your API routes differ, change them HERE ONLY.
+ */
+const base = `${environment.apiBaseUrl}${environment.apiPrefix}`;
+
 export const API = {
   auth: {
-    login: '/api/v1/auth/login',
-    register: '/api/v1/auth/register',
-    me: '/api/v1/auth/me',
-    profile: '/api/v1/auth/profile',
+    login: `${base}/auth/login`,
+    register: `${base}/auth/register`,
+    me: `${base}/auth/me`,
+    forgotPassword: `${base}/auth/forgot-password`,
+    resetPassword: `${base}/auth/reset-password`,
+    changePassword: `${base}/auth/change-password`,
   },
   users: {
-    profile: '/api/v1/users/profile',
-    updateProfile: '/api/v1/users/profile',
+    profile: `${base}/users/profile`,
+    updateProfile: `${base}/users/profile`,
+    changePassword: `${base}/users/change-password`,
   },
   petitions: {
-    base: '/api/v1/petitions',
-    detail: (id: string) => `/api/v1/petitions/${id}`,
-    my: '/api/v1/petitions/my',
-    signed: '/api/v1/petitions/signed',
-    sign: (id: string) => `/api/v1/petitions/${id}/sign`,
-    unsign: (id: string) => `/api/v1/petitions/${id}/sign`,
-  },
-  polls: {
-    base: '/api/v1/polls',
-    detail: (id: string) => `/api/v1/polls/${id}`,
-    vote: (id: string) => `/api/v1/polls/${id}/vote`,
-    status: (id: string) => `/api/v1/polls/${id}/status`,
-    results: (id: string) => `/api/v1/polls/${id}/results`,
+    list: `${base}/petitions`,
+    create: `${base}/petitions`,
+    byId: (id: string) => `${base}/petitions/${id}`,
+    update: (id: string) => `${base}/petitions/${id}`,
+    remove: (id: string) => `${base}/petitions/${id}`,
+    sign: (id: string) => `${base}/petitions/${id}/sign`,
+    mine: `${base}/petitions/my`,
+    signed: `${base}/petitions/signed`,
+    respond: (id: string) => `${base}/petitions/${id}/response`,
+    status: (id: string) => `${base}/petitions/${id}/status`,
   },
   governance: {
-    petitions: '/api/v1/governance/petitions',
-    respond: (id: string) => `/api/v1/petitions/${id}/response`,
-    updateStatus: (id: string) => `/api/v1/petitions/${id}/status`,
+    petitions: `${base}/governance/petitions`,
+  },
+  polls: {
+    list: `${base}/polls`,
+    create: `${base}/polls`,
+    byId: (id: string) => `${base}/polls/${id}`,
+    vote: (id: string) => `${base}/polls/${id}/vote`,
+    results: (id: string) => `${base}/polls/${id}/results`,
+    status: (id: string) => `${base}/polls/${id}/status`,
   },
   reports: {
-    summary: '/api/v1/reports/summary',
-    petitions: '/api/v1/reports/petitions',
-    polls: '/api/v1/reports/polls',
-    sentiment: '/api/v1/reports/sentiment',
-    exportCsv: '/api/v1/reports/export',
+    summary: `${base}/reports/summary`,
+    petitions: `${base}/reports/petitions`,
+    polls: `${base}/reports/polls`,
+    export: `${base}/reports/export`,
+    sentiment: `${base}/reports/sentiment`,
   },
-};
+} as const;
+
+export const API_BASE = base;

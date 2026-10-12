@@ -25,8 +25,20 @@ const updateProfileValidator = [
   body('location').optional().isObject()
 ];
 
+const changePasswordValidator = [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').notEmpty().isLength({ min: 6 }).withMessage('New password must be at least 6 characters long'),
+  body('confirmPassword').notEmpty().withMessage('Please confirm your new password').custom((value, { req }) => {
+    if (value !== req.body.newPassword) {
+      throw new Error('New passwords do not match');
+    }
+    return true;
+  })
+];
+
 module.exports = {
   registerValidator,
   loginValidator,
-  updateProfileValidator
+  updateProfileValidator,
+  changePasswordValidator
 };

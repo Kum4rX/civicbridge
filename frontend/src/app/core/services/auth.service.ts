@@ -4,7 +4,14 @@ import { Router } from '@angular/router';
 import { Observable, map, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { API } from '../api/api-endpoints';
-import { AuthResponse, LoginRequest, RegisterRequest, User, UserRole } from '../models/user.model';
+import {
+  AuthResponse,
+  ChangePasswordRequest,
+  LoginRequest,
+  RegisterRequest,
+  User,
+  UserRole,
+} from '../models/user.model';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -58,7 +65,13 @@ export class AuthService {
       );
   }
 
-  /** Refreshes the cached user from the backend (source of truth). */
+  changePassword(payload: ChangePasswordRequest): Observable<{ success: boolean; message: string }> {
+    return this.http.put<{ success: boolean; message: string }>(
+      API.auth.changePassword,
+      payload,
+    );
+  }
+
   loadCurrentUser(): Observable<User> {
     return this.http.get<unknown>(API.auth.me).pipe(
       map((raw) => {
@@ -89,7 +102,6 @@ export class AuthService {
     if (redirect) void this.router.navigate(['/login']);
   }
 
-  /** Normalises user object so location and identity fields are flat and consistent. */
   normaliseUser(raw: unknown): User {
     if (!raw || typeof raw !== 'object') return raw as User;
     const u = raw as Record<string, any>;
@@ -111,7 +123,6 @@ export class AuthService {
     } as User;
   }
 
-  /** Maps the backend auth payload onto `{ token, user }`. Adjust here if field names differ. */
   private normalise(raw: unknown): AuthResponse {
     const body = (raw ?? {}) as Record<string, any>;
     const token = body['token'] ?? body['accessToken'] ?? body['jwt'] ?? body['data']?.token ?? '';

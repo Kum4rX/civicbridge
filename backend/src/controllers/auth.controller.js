@@ -2,7 +2,8 @@ const {
   register,
   login,
   getUserById,
-  updateProfile: updateProfileService
+  updateProfile: updateProfileService,
+  changePassword: changePasswordService
 } = require('../services/auth.service');
 
 const registerUser = async (req, res) => {
@@ -51,9 +52,21 @@ const updateProfile = async (req, res) => {
   }
 };
 
+const changePassword = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { currentPassword, newPassword } = req.body;
+    await changePasswordService(userId, currentPassword, newPassword);
+    res.status(200).json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    res.status(error.statusCode || 400).json({ success: false, message: error.message || 'Failed to change password' });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
   getCurrentUser,
-  updateProfile
+  updateProfile,
+  changePassword
 };

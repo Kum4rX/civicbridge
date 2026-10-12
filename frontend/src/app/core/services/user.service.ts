@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map, tap } from 'rxjs';
 import { API } from '../api/api-endpoints';
-import { LocationInfo, User } from '../models/user.model';
+import { ChangePasswordRequest, LocationInfo, User } from '../models/user.model';
 import { AuthService } from './auth.service';
 
 export type ProfileUpdate = Partial<Pick<User, 'fullName' | 'email'>> & LocationInfo;
@@ -41,6 +41,13 @@ export class UserService {
       tap((updatedUser) => {
         this.auth.setUser(updatedUser);
       }),
+    );
+  }
+
+  changePassword(payload: ChangePasswordRequest): Observable<{ success: boolean; message: string }> {
+    return this.http.put<{ success: boolean; message: string }>(
+      API.users.changePassword,
+      payload,
     );
   }
 }
