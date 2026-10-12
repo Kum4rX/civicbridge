@@ -7,6 +7,7 @@ import { API } from '../api/api-endpoints';
 import {
   AuthResponse,
   ChangePasswordRequest,
+  ForgotPasswordRequest,
   LoginRequest,
   RegisterRequest,
   User,
@@ -63,6 +64,13 @@ export class AuthService {
         map((raw) => this.normalise(raw)),
         tap((auth) => this.persist(auth, true)),
       );
+  }
+
+  forgotPassword(payload: ForgotPasswordRequest): Observable<{ success: boolean; message: string }> {
+    return this.http.post<{ success: boolean; message: string }>(
+      API.auth.forgotPassword,
+      payload,
+    );
   }
 
   changePassword(payload: ChangePasswordRequest): Observable<{ success: boolean; message: string }> {

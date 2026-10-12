@@ -3,8 +3,10 @@ const {
   login,
   getUserById,
   updateProfile: updateProfileService,
-  changePassword: changePasswordService
+  changePassword: changePasswordService,
+  requestPasswordReset
 } = require('../services/auth.service');
+const emailService = require('../services/email.service');
 
 const registerUser = async (req, res) => {
   try {
@@ -63,10 +65,36 @@ const changePassword = async (req, res) => {
   }
 };
 
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const result = await requestPasswordReset(email);
+    return res.status(200).json({ success: true, message: result.message });
+  } catch (error) {
+    console.error('[ForgotPassword] Email delivery failed:', error.message);
+    const status = error.code === 'SMTP_NOT_CONFIGURED' ? 503 : 500;
+    const message = error.code === 'SMTP_NOT_CONFIGURED'
+      ? 'Email delivery is not configured on the server. Please configure SMTP in backend/.env.'
+      : 'Failed to deliver password reset email due to an email delivery error. Please try again later.';
+    return res.status(status).json({ success: false, message });
+  }
+};
+
+const getSmtpStatus = async (req, res) => {
+  try {
+    const status = await emailService.verifyConnection();
+    res.status(200).json({ success: true, data: status });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to check SMTP status' });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
   getCurrentUser,
   updateProfile,
-  changePassword
+  changePassword,
+  forgotPassword,
+  getSmtpStatus
 };

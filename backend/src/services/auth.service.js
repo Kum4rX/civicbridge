@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/user.model');
+const emailService = require('./email.service');
 
 const generateToken = (userId) => {
   return jwt.sign(
@@ -118,11 +119,29 @@ const changePassword = async (userId, currentPassword, newPassword) => {
   return true;
 };
 
+const requestPasswordReset = async (email) => {
+  if (!email) {
+    return {
+      message: 'If an account exists with that email address, a password reset link has been sent.'
+    };
+  }
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
+  if (user) {
+    const resetToken = user.createPasswordResetToken();
+    await user.save({ validateBeforeSave: false });
+    await emailService.sendPasswordResetEmail({ email: user.email, resetToken, user });
+  }
+  return {
+    message: 'If an account exists with that email address, a password reset link has been sent.'
+  };
+};
+
 module.exports = {
   register,
   login,
   getUserById,
   updateProfile,
   changePassword,
+  requestPasswordReset,
   generateToken
 };

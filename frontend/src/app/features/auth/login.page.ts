@@ -58,9 +58,12 @@ import { AuthPanelComponent } from './auth-panel.component';
           }
         </div>
 
-        <label class="row small">
-          <input type="checkbox" formControlName="remember" /> Keep me signed in
-        </label>
+        <div class="row row--between small" style="margin-top: 4px; margin-bottom: 8px;">
+          <label class="row" style="margin: 0; gap: 6px;">
+            <input type="checkbox" formControlName="remember" /> Keep me signed in
+          </label>
+          <a routerLink="/forgot-password" class="small forgot-link">Forgot password?</a>
+        </div>
 
         <button class="btn btn--primary btn--block mt" type="submit" [disabled]="busy()">
           @if (busy()) {
@@ -93,6 +96,14 @@ import { AuthPanelComponent } from './auth-panel.component';
         border-radius: var(--r-sm);
         font-size: 0.85rem;
         margin-bottom: 14px;
+      }
+      .forgot-link {
+        color: var(--c-primary);
+        font-weight: 500;
+        text-decoration: none;
+      }
+      .forgot-link:hover {
+        text-decoration: underline;
       }
     `,
   ],
