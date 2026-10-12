@@ -1,13 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { registerUser, loginUser, getCurrentUser } = require('../controllers/auth.controller');
+const {
+  registerUser,
+  loginUser,
+  getCurrentUser,
+  updateProfile
+} = require('../controllers/auth.controller');
 const auth = require('../middleware/auth.middleware');
+const validate = require('../middleware/validate.middleware');
+const {
+  registerValidator,
+  loginValidator,
+  updateProfileValidator
+} = require('../validators/auth.validator');
 
-// Public routes
-router.post('/register', registerUser);
-router.post('/login', loginUser);
-
-// Protected routes
+router.post('/register', registerValidator, validate, registerUser);
+router.post('/login', loginValidator, validate, loginUser);
 router.get('/me', auth, getCurrentUser);
+router.put('/profile', auth, updateProfileValidator, validate, updateProfile);
 
 module.exports = router;

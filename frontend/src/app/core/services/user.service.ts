@@ -1,6 +1,7 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, throwError } from 'rxjs';
+import { Observable, map, tap } from 'rxjs';
+import { API } from '../api/api-endpoints';
 import { LocationInfo, User } from '../models/user.model';
 import { AuthService } from './auth.service';
 
@@ -8,6 +9,7 @@ export type ProfileUpdate = Partial<Pick<User, 'fullName' | 'email'>> & Location
 
 @Injectable({ providedIn: 'root' })
 export class UserService {
+  private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
 
   profile(): Observable<User> {
@@ -15,13 +17,30 @@ export class UserService {
   }
 
   updateProfile(payload: ProfileUpdate): Observable<User> {
-    return throwError(
-      () =>
-        new HttpErrorResponse({
-          status: 501,
-          statusText: 'Not Implemented',
-          error: { message: 'Profile editing will be available in a later milestone' },
-        }),
+    const body = {
+      fullName: payload.fullName,
+      email: payload.email,
+      address: payload.address ?? null,
+      city: payload.city ?? null,
+      state: payload.state ?? null,
+      pincode: payload.pincode ?? null,
+      location: {
+        address: payload.address ?? '',
+        city: payload.city ?? '',
+        state: payload.state ?? '',
+        pincode: payload.pincode ?? '',
+      },
+    };
+
+    return this.http.put<unknown>(API.users.updateProfile, body).pipe(
+      map((raw) => {
+        const res = (raw ?? {}) as Record<string, any>;
+        const rawUser = res['data']?.user ?? res['user'] ?? res['data'] ?? res;
+        return this.auth.normaliseUser(rawUser);
+      }),
+      tap((updatedUser) => {
+        this.auth.setUser(updatedUser);
+      }),
     );
   }
 }

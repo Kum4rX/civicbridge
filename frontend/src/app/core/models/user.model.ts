@@ -1,4 +1,4 @@
-export type UserRole = 'CITIZEN' | 'OFFICIAL';
+export type UserRole = 'CITIZEN' | 'OFFICIAL' | 'ADMIN';
 
 export interface LocationInfo {
   address?: string | null;
@@ -14,8 +14,13 @@ export interface User extends LocationInfo {
   fullName: string;
   email: string;
   role: UserRole;
-  verified?: boolean | null;
+  verified: boolean;
   createdAt?: string | null;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
 }
 
 export interface LoginRequest {
@@ -27,11 +32,5 @@ export interface RegisterRequest extends LocationInfo {
   fullName: string;
   email: string;
   password: string;
-  role: UserRole;
-}
-
-/** Backend auth response. Adjust field names in AuthService.normalise() if yours differ. */
-export interface AuthResponse {
-  token: string;
-  user: User;
+  role?: UserRole;
 }

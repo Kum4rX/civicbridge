@@ -1,47 +1,29 @@
-import { DatePipe, NgIf } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
-import { LoadState } from '../../core/models/api.model';
 import { User } from '../../core/models/user.model';
 import { AuthService } from '../../core/services/auth.service';
-import { apiErrorMessage, isUnavailable } from '../../core/services/http-util';
 import { NotificationService } from '../../core/services/notification.service';
 import { UserService } from '../../core/services/user.service';
-import { ErrorStateComponent } from '../../shared/components/error-state.component';
-import { LoaderComponent } from '../../shared/components/loader.component';
-import { PageHeaderComponent } from '../../shared/components/page-header.component';
+import { apiErrorMessage } from '../../shared/utils/api-error';
+
+type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
 
 @Component({
-  selector: 'cx-profile',
+  selector: 'app-profile',
   standalone: true,
-  imports: [NgIf, DatePipe, ReactiveFormsModule, RouterLink, PageHeaderComponent, LoaderComponent, ErrorStateComponent],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink],
   template: `
-    <cx-page-header
-      eyebrow="Account"
-      title="Your profile"
-      subtitle="Your location decides which petitions and polls are shown to you first."
-    >
-      <button class="btn btn--ghost" type="button" (click)="auth.logout()">Sign out</button>
-    </cx-page-header>
-
-    <cx-loader *ngIf="state() === 'loading'" variant="rows" [count]="4"></cx-loader>
-    <cx-error-state
-      *ngIf="state() === 'error'"
-      title="Couldn’t load your profile"
-      [message]="error()"
-      (retry)="load()"
-    ></cx-error-state>
-
-    <div class="layout" *ngIf="state() === 'loaded' || state() === 'unavailable'">
+    <div class="layout" *ngIf="user()">
       <aside class="card identity">
         <div class="avatar" aria-hidden="true">{{ initials() }}</div>
-        <h2 style="margin-top:14px">{{ user()?.fullName }}</h2>
+        <h1 class="h2" style="margin-top:14px">{{ user()?.fullName }}</h1>
         <p class="muted small">{{ user()?.email }}</p>
-        <div class="row" style="margin-top:12px;flex-wrap:wrap">
-          <span class="badge" [class.badge--info]="auth.isOfficial()" [class.badge--active]="auth.isCitizen()">
-            {{ auth.isOfficial() ? 'Government official' : 'Citizen' }}
+        <div class="row row--center" style="gap:8px;margin-top:8px">
+          <span class="badge" [class.badge--accent]="auth.isOfficial()">
+            {{ user()?.role }}
           </span>
           <span class="badge badge--active" *ngIf="user()?.verified">Verified</span>
         </div>
@@ -56,59 +38,144 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
         </div>
       </aside>
 
-      <section class="card">
-        <div class="card__head">
-          <h2>Edit details</h2>
-          <p class="muted small" *ngIf="state() === 'unavailable'">
-            Profile editing isn’t exposed by the backend yet — showing your sign-in details.
-          </p>
-        </div>
-
-        <form [formGroup]="form" (ngSubmit)="save()" novalidate>
-          <div class="form-grid">
-            <div class="field">
-              <label for="fullName">Full name</label>
-              <input id="fullName" class="input" formControlName="fullName" [class.is-invalid]="invalid('fullName')" autocomplete="name" />
-              <span class="error-text" *ngIf="invalid('fullName')">Name is required (2–80 characters).</span>
-            </div>
-            <div class="field">
-              <label for="email">Email</label>
-              <input id="email" type="email" class="input" formControlName="email" [class.is-invalid]="invalid('email')" autocomplete="email" />
-              <span class="error-text" *ngIf="invalid('email')">Enter a valid email address.</span>
-            </div>
+      <div class="forms-wrapper stack" style="gap:24px">
+        <!-- Profile Details Card -->
+        <section class="card">
+          <div class="card__head">
+            <h2>Edit Profile Details</h2>
+            <p class="muted small">
+              Update your name, registered email address, and residential location details.
+            </p>
           </div>
 
-          <div class="field">
-            <label for="address">Street address</label>
-            <input id="address" class="input" formControlName="address" autocomplete="street-address" />
+          <div *ngIf="profileSuccess()" class="alert-banner alert-banner--success" role="alert">
+            <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <span>{{ profileSuccess() }}</span>
           </div>
 
-          <div class="form-grid">
-            <div class="field">
-              <label for="city">City</label>
-              <input id="city" class="input" formControlName="city" [class.is-invalid]="invalid('city')" autocomplete="address-level2" />
-              <span class="error-text" *ngIf="invalid('city')">City is required.</span>
-            </div>
-            <div class="field">
-              <label for="state">State</label>
-              <input id="state" class="input" formControlName="state" [class.is-invalid]="invalid('state')" autocomplete="address-level1" />
-              <span class="error-text" *ngIf="invalid('state')">State is required.</span>
-            </div>
-            <div class="field">
-              <label for="pincode">PIN code</label>
-              <input id="pincode" class="input" formControlName="pincode" inputmode="numeric" [class.is-invalid]="invalid('pincode')" autocomplete="postal-code" />
-              <span class="error-text" *ngIf="invalid('pincode')">Enter a 4–10 digit code.</span>
-            </div>
+          <div *ngIf="profileError()" class="alert-banner alert-banner--error" role="alert">
+            <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+            <span>{{ profileError() }}</span>
           </div>
 
-          <div class="row" style="justify-content:flex-end;margin-top:8px">
-            <button type="button" class="btn btn--ghost" (click)="reset()" [disabled]="saving() || form.pristine">Reset</button>
-            <button type="submit" class="btn btn--primary" [disabled]="saving() || form.pristine || state() === 'unavailable'">
-              <span class="spinner" *ngIf="saving()"></span>Save changes
-            </button>
-          </div>
-        </form>
-      </section>
+          <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" novalidate>
+            <div class="form-grid">
+              <div class="field">
+                <label for="fullName">Full Name <span class="required">*</span></label>
+                <input
+                  id="fullName"
+                  class="input"
+                  formControlName="fullName"
+                  [class.is-invalid]="invalidProfile('fullName')"
+                  autocomplete="name"
+                  placeholder="e.g. John Doe"
+                />
+                <span class="error-text" *ngIf="invalidProfile('fullName')">
+                  Full name is required (2–100 characters).
+                </span>
+              </div>
+
+              <div class="field">
+                <label for="email">Email Address <span class="required">*</span></label>
+                <input
+                  id="email"
+                  type="email"
+                  class="input"
+                  formControlName="email"
+                  [class.is-invalid]="invalidProfile('email')"
+                  autocomplete="email"
+                  placeholder="e.g. user@example.com"
+                />
+                <span class="error-text" *ngIf="invalidProfile('email')">
+                  Enter a valid email address.
+                </span>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="address">Street Address</label>
+              <input
+                id="address"
+                class="input"
+                formControlName="address"
+                autocomplete="street-address"
+                placeholder="e.g. 124 Main Street, Sector 4"
+              />
+            </div>
+
+            <div class="form-grid form-grid--3">
+              <div class="field">
+                <label for="city">City <span class="required">*</span></label>
+                <input
+                  id="city"
+                  class="input"
+                  formControlName="city"
+                  [class.is-invalid]="invalidProfile('city')"
+                  autocomplete="address-level2"
+                  placeholder="e.g. Bengaluru"
+                />
+                <span class="error-text" *ngIf="invalidProfile('city')">
+                  City is required.
+                </span>
+              </div>
+
+              <div class="field">
+                <label for="state">State <span class="required">*</span></label>
+                <input
+                  id="state"
+                  class="input"
+                  formControlName="state"
+                  [class.is-invalid]="invalidProfile('state')"
+                  autocomplete="address-level1"
+                  placeholder="e.g. Karnataka"
+                />
+                <span class="error-text" *ngIf="invalidProfile('state')">
+                  State is required.
+                </span>
+              </div>
+
+              <div class="field">
+                <label for="pincode">PIN Code</label>
+                <input
+                  id="pincode"
+                  class="input"
+                  formControlName="pincode"
+                  inputmode="numeric"
+                  [class.is-invalid]="invalidProfile('pincode')"
+                  autocomplete="postal-code"
+                  placeholder="e.g. 560001"
+                />
+                <span class="error-text" *ngIf="invalidProfile('pincode')">
+                  Enter a 4–10 digit PIN code.
+                </span>
+              </div>
+            </div>
+
+            <div class="row form-actions">
+              <button
+                type="button"
+                class="btn btn--ghost"
+                (click)="resetProfile()"
+                [disabled]="profileSaving() || profileForm.pristine"
+              >
+                Reset
+              </button>
+              <button
+                type="submit"
+                class="btn btn--primary"
+                [disabled]="profileSaving() || profileForm.pristine"
+              >
+                <span class="spinner" *ngIf="profileSaving()"></span>
+                Save Profile
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
     </div>
   `,
   styles: [
@@ -153,8 +220,49 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
         font-weight: 600;
         text-align: right;
       }
+      .form-grid--3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      .form-actions {
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .required {
+        color: var(--c-danger);
+      }
+      .alert-banner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-radius: var(--r-sm);
+        font-size: 0.88rem;
+        font-weight: 500;
+        margin-bottom: 18px;
+      }
+      .alert-banner--success {
+        background: var(--c-success-soft);
+        color: var(--c-success);
+        border: 1px solid rgba(18, 128, 92, 0.2);
+      }
+      .alert-banner--error {
+        background: var(--c-danger-soft);
+        color: var(--c-danger);
+        border: 1px solid rgba(180, 35, 24, 0.2);
+      }
+      .alert-icon {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+      }
       @media (max-width: 900px) {
         .layout {
+          grid-template-columns: 1fr;
+        }
+        .form-grid--3 {
           grid-template-columns: 1fr;
         }
       }
@@ -169,8 +277,12 @@ export class ProfilePage implements OnInit {
 
   readonly state = signal<LoadState>('idle');
   readonly error = signal('');
-  readonly saving = signal(false);
   readonly user = signal<User | null>(this.auth.user());
+
+  // Profile Form States
+  readonly profileSaving = signal(false);
+  readonly profileError = signal('');
+  readonly profileSuccess = signal('');
 
   readonly initials = computed(() =>
     (this.user()?.fullName ?? '?')
@@ -180,17 +292,18 @@ export class ProfilePage implements OnInit {
       .map((p) => p[0]?.toUpperCase())
       .join(''),
   );
+
   readonly locationLabel = computed(() => {
     const u = this.user();
     return [u?.city, u?.state].filter(Boolean).join(', ') || 'Not set';
   });
 
-  readonly form = this.fb.nonNullable.group({
-    fullName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(80)]],
+  readonly profileForm = this.fb.nonNullable.group({
+    fullName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(100)]],
     email: ['', [Validators.required, Validators.email, Validators.maxLength(255)]],
     address: ['', [Validators.maxLength(200)]],
-    city: ['', [Validators.required, Validators.maxLength(80)]],
-    state: ['', [Validators.required, Validators.maxLength(80)]],
+    city: ['', [Validators.required, Validators.maxLength(100)]],
+    state: ['', [Validators.required, Validators.maxLength(100)]],
     pincode: ['', [Validators.pattern(/^\d{4,10}$/)]],
   });
 
@@ -202,48 +315,41 @@ export class ProfilePage implements OnInit {
     this.state.set('loading');
     this.users.profile().subscribe({
       next: (user) => {
-        this.apply(user);
-        this.auth.setUser(user);
+        this.applyUser(user);
         this.state.set('loaded');
       },
       error: (err) => {
-        if (isUnavailable(err)) {
-          // Fall back to /auth/me which is part of the known contract.
-          this.auth.loadCurrentUser().subscribe({
-            next: (user) => {
-              this.apply(user);
-              this.state.set('unavailable');
-            },
-            error: (e) => {
-              this.error.set(apiErrorMessage(e));
-              this.state.set('error');
-            },
-          });
-          return;
-        }
-        this.error.set(apiErrorMessage(err));
+        this.error.set(apiErrorMessage(err, 'Failed to retrieve profile details.'));
         this.state.set('error');
       },
     });
   }
 
-  invalid(name: keyof typeof this.form.controls): boolean {
-    const c = this.form.controls[name];
+  invalidProfile(name: keyof typeof this.profileForm.controls): boolean {
+    const c = this.profileForm.controls[name];
     return c.invalid && (c.touched || c.dirty);
   }
 
-  reset(): void {
+  resetProfile(): void {
     const u = this.user();
-    if (u) this.apply(u);
+    if (u) {
+      this.applyUser(u);
+      this.profileError.set('');
+      this.profileSuccess.set('');
+    }
   }
 
-  save(): void {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
+  saveProfile(): void {
+    if (this.profileForm.invalid) {
+      this.profileForm.markAllAsTouched();
       return;
     }
-    this.saving.set(true);
-    const v = this.form.getRawValue();
+
+    this.profileSaving.set(true);
+    this.profileError.set('');
+    this.profileSuccess.set('');
+
+    const v = this.profileForm.getRawValue();
     this.users
       .updateProfile({
         fullName: v.fullName.trim(),
@@ -253,21 +359,24 @@ export class ProfilePage implements OnInit {
         state: v.state.trim(),
         pincode: v.pincode.trim() || null,
       })
-      .pipe(finalize(() => this.saving.set(false)))
+      .pipe(finalize(() => this.profileSaving.set(false)))
       .subscribe({
-        next: (user) => {
-          const merged = { ...this.user(), ...user } as User;
-          this.apply(merged);
-          this.auth.setUser(merged);
+        next: (updatedUser) => {
+          this.applyUser(updatedUser);
+          this.profileSuccess.set('Profile details updated successfully.');
           this.toast.success('Profile updated.');
         },
-        error: (err) => this.toast.error(apiErrorMessage(err, 'Could not save your profile.')),
+        error: (err) => {
+          const msg = apiErrorMessage(err, 'Could not save your profile changes.');
+          this.profileError.set(msg);
+          this.toast.error(msg);
+        },
       });
   }
 
-  private apply(user: User): void {
+  private applyUser(user: User): void {
     this.user.set(user);
-    this.form.reset({
+    this.profileForm.reset({
       fullName: user.fullName ?? '',
       email: user.email ?? '',
       address: user.address ?? '',

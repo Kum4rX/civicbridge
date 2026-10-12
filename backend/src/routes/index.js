@@ -1,5 +1,6 @@
 const express = require('express');
 const authRoutes = require('./auth.routes');
+const userRoutes = require('./user.routes');
 const { sendSuccess } = require('../utils/response');
 
 const router = express.Router();
@@ -14,6 +15,9 @@ router.get('/health', (req, res) => {
 
 // Authentication routes
 router.use('/auth', authRoutes);
+
+// User profile & account routes
+router.use('/users', userRoutes);
 
 // Petition routes
 const petitionRoutes = require('./petition.routes');
