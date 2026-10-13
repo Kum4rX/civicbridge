@@ -1,6 +1,6 @@
 export const environment = {
   production: true,
-  apiBaseUrl: 'https://civicbridge-server.onrender.com',
+  apiBaseUrl: 'https://civicbridge-backend-y8gc.onrender.com',
   apiPrefix: '/api',
   tokenStorageKey: 'civix.token',
   userStorageKey: 'civix.user',
