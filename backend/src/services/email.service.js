@@ -130,10 +130,15 @@ class EmailService {
       throw new Error('Recipient email and reset token are required to dispatch email');
     }
 
-    const frontendBaseUrl =
+    const rawFrontend =
       process.env.CLIENT_ORIGIN ||
       process.env.FRONTEND_URL ||
       'http://localhost:4200';
+    const frontendBaseUrl = rawFrontend
+      .split(',')[0]
+      .trim()
+      .replace(/^[\"']|[\"']$/g, '')
+      .replace(/\/+$/, '');
     const resetUrl = `${frontendBaseUrl}/reset-password?token=${resetToken}`;
     const maskedRecipient = this.getMaskedEmail(email);
 
